@@ -32,7 +32,7 @@ Manifold has no built-in connectors. It is a pure auth and routing layer. Your M
 
 ```bash
 # Clone and configure
-git clone https://github.com/your-org/manifold.git
+git clone https://github.com/sscarltonbuilds/manifold.git
 cd manifold
 cp .env.example .env.local
 # edit .env.local — see docs/deployment.md
