@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Manifold
 
-## Getting Started
+**One endpoint. Every connector.**
 
-First, run the development server:
+Manifold is a self-hosted MCP (Model Context Protocol) access management platform for teams. It acts as a single authenticated gateway in front of your MCP servers — so your team gets one URL, one login, and a clean UI to manage their own connector credentials.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+Your AI tool  →  manifold.yourdomain.com/mcp  →  Pipedrive MCP server
+                                               →  Trello MCP server
+                                               →  Google Drive MCP server
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+No config files. No shared API keys. Full admin visibility.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## What it does
 
-## Learn More
+- **Single MCP endpoint** for your whole org — paste one URL into your AI tool's settings
+- **Google SSO** — team members sign in with their work account, no passwords
+- **Connector registry** — admins register external MCP servers via a `manifold.json` manifest
+- **Per-user credentials** — each person enters their own API keys; Manifold encrypts and stores them
+- **Admin governance** — disable tools, set rate limits, force-enable connectors, manage on behalf of users
+- **OAuth 2.1 / PKCE** — issues Bearer tokens to MCP clients following the standard auth flow
+- **Audit log** — every credential change, connector toggle, and role change recorded
 
-To learn more about Next.js, take a look at the following resources:
+Manifold has no built-in connectors. It is a pure auth and routing layer. Your MCP servers live wherever they live.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Quick start
 
-## Deploy on Vercel
+```bash
+# Clone and configure
+git clone https://github.com/your-org/manifold.git
+cd manifold
+cp .env.example .env.local
+# edit .env.local — see docs/deployment.md
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# Start
+docker compose up
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Open `http://localhost:3000`. Sign in with Google — the first user becomes admin.
+
+---
+
+## Documentation
+
+- [Deployment](docs/deployment.md) — Docker, environment variables, production setup
+- [Connecting your AI tool](docs/mcp-setup.md) — Adding Manifold as an MCP source
+- [Writing connectors](docs/connectors.md) — `manifold.json` format, auth types, publishing
+- [CLI reference](docs/cli.md) — `manifold` command-line tool
+- [Architecture](docs/architecture.md) — How the proxy works, security model
+
+---
+
+## Tech stack
+
+Next.js 15 · TypeScript · PostgreSQL · Drizzle ORM · NextAuth v5 · AES-256-GCM · Docker
+
+---
+
+## Licence
+
+MIT

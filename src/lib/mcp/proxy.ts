@@ -1,0 +1,337 @@
+import { db } from '@/lib/db'
+import { oauthTokens, users, userConnectorConfigs, connectors, connectorPolicies, connectorAdminConfigs, auditLogs } from '@/lib/db/schema'
+import { eq, and, gt } from 'drizzle-orm'
+import { hashToken, decrypt } from '@/lib/crypto'
+import type { User, Connector } from '@/lib/db/schema'
+import type { JsonRpcRequest, JsonRpcResponse, McpTool } from './types'
+import type { Manifest, Injection } from '@/lib/manifest'
+
+const PROXY_TIMEOUT_MS = 30_000
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+export async function resolveUser(authHeader: string): Promise<User | null> {
+  if (!authHeader.startsWith('Bearer ')) return null
+  const token = authHeader.slice(7)
+  const tokenHash = hashToken(token)
+
+  const [row] = await db
+    .select({ user: users })
+    .from(oauthTokens)
+    .innerJoin(users, eq(oauthTokens.userId, users.id))
+    .where(and(eq(oauthTokens.tokenHash, tokenHash), gt(oauthTokens.expiresAt, new Date())))
+    .limit(1)
+
+  return row?.user ?? null
+}
+
+// ---------------------------------------------------------------------------
+// Tool list — reads from discoveredTools in DB, applies policy
+// ---------------------------------------------------------------------------
+
+export async function getEnabledTools(userId: string): Promise<McpTool[]> {
+  // Load user's enabled connector configs
+  const configs = await db
+    .select({
+      connectorId: userConnectorConfigs.connectorId,
+    })
+    .from(userConnectorConfigs)
+    .where(and(eq(userConnectorConfigs.userId, userId), eq(userConnectorConfigs.enabled, true)))
+
+  if (configs.length === 0) return []
+
+  const connectorIds = configs.map(c => c.connectorId)
+
+  // Load active connectors + their policies
+  const connectorRows = await db.select().from(connectors)
+  const policyRows = await db.select().from(connectorPolicies)
+
+  const policyMap = new Map(policyRows.map(p => [p.connectorId, p]))
+
+  const tools: McpTool[] = []
+
+  for (const { connectorId } of connectorIds.map(id => ({ connectorId: id }))) {
+    const connector = connectorRows.find(c => c.id === connectorId && c.status === 'active')
+    if (!connector) continue // connector removed or deprecated — skip gracefully
+
+    const policy = policyMap.get(connectorId)
+    const disabledTools = new Set<string>(
+      Array.isArray(policy?.disabledTools) ? (policy.disabledTools as string[]) : []
+    )
+
+    const discovered = connector.discoveredTools as McpTool[] | null
+    if (!Array.isArray(discovered)) continue
+
+    for (const tool of discovered) {
+      if (disabledTools.has(tool.name)) continue
+      tools.push(tool)
+    }
+  }
+
+  return tools
+}
+
+// ---------------------------------------------------------------------------
+// Credential injection
+// ---------------------------------------------------------------------------
+
+function buildHeaders(
+  manifest: Manifest,
+  decryptedConfig: Record<string, string>,
+): Record<string, string> {
+  const headers: Record<string, string> = {}
+  const auth = manifest.auth
+
+  if (auth.type === 'none') return headers
+  if (auth.type === 'admin_managed') return headers // credentials injected separately
+
+  if (auth.type === 'api_key' || auth.type === 'bearer_token') {
+    for (const field of auth.fields) {
+      if (!field.injection) continue
+      const value = decryptedConfig[field.key]
+      if (!value) continue
+
+      const injection = field.injection as Injection
+      if (injection.method === 'header') {
+        headers[injection.name] = value
+      } else if (injection.method === 'bearer') {
+        headers['Authorization'] = `Bearer ${value}`
+      }
+      // query-param injections are handled in buildSearchParams
+    }
+  }
+
+  return headers
+}
+
+function buildSearchParams(
+  manifest: Manifest,
+  decryptedConfig: Record<string, string>,
+): URLSearchParams {
+  const params = new URLSearchParams()
+  const auth = manifest.auth
+
+  if (auth.type === 'api_key' || auth.type === 'bearer_token') {
+    for (const field of auth.fields) {
+      if (!field.injection) continue
+      const value = decryptedConfig[field.key]
+      if (!value) continue
+      const injection = field.injection as Injection
+      if (injection.method === 'query') {
+        params.set(injection.name, value)
+      }
+    }
+  }
+
+  return params
+}
+
+// ---------------------------------------------------------------------------
+// Proxy tool call
+// ---------------------------------------------------------------------------
+
+async function proxyToConnector(
+  connector: Connector,
+  method: string,
+  params: unknown,
+  credHeaders: Record<string, string>,
+  credParams: URLSearchParams,
+): Promise<unknown> {
+  const paramStr = credParams.toString()
+  const url = paramStr ? `${connector.endpoint}?${paramStr}` : connector.endpoint
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS)
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...credHeaders,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method,
+        params,
+      }),
+      signal: controller.signal,
+    })
+
+    if (!res.ok) {
+      throw new Error(`Connector returned HTTP ${res.status}`)
+    }
+
+    const data = await res.json() as { result?: unknown; error?: { code: number; message: string } }
+    if (data.error) {
+      throw new Error(`Connector error: ${data.error.message}`)
+    }
+    return data.result
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`Connector timed out after ${PROXY_TIMEOUT_MS / 1000}s`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export async function proxyToolCall(
+  userId: string,
+  toolName: string,
+  args: unknown,
+): Promise<unknown> {
+  // Find which connector owns this tool
+  const allConnectors = await db.select().from(connectors).where(eq(connectors.status, 'active'))
+
+  let ownerConnector: Connector | undefined
+  for (const c of allConnectors) {
+    const tools = c.discoveredTools as Array<{ name: string }> | null
+    if (Array.isArray(tools) && tools.some(t => t.name === toolName)) {
+      ownerConnector = c
+      break
+    }
+  }
+
+  if (!ownerConnector) {
+    throw new Error(`Unknown tool: ${toolName}`)
+  }
+
+  const manifest = ownerConnector.manifest as Manifest
+
+  // Load credentials
+  let decryptedConfig: Record<string, string> = {}
+
+  if (ownerConnector.managedBy === 'admin') {
+    // Use org-level admin credentials
+    const [adminConfig] = await db
+      .select()
+      .from(connectorAdminConfigs)
+      .where(eq(connectorAdminConfigs.connectorId, ownerConnector.id))
+      .limit(1)
+
+    if (adminConfig) {
+      decryptedConfig = JSON.parse(decrypt(adminConfig.encryptedConfig)) as Record<string, string>
+    }
+  } else {
+    // Use user's personal credentials
+    const [userConfig] = await db
+      .select()
+      .from(userConnectorConfigs)
+      .where(
+        and(
+          eq(userConnectorConfigs.userId, userId),
+          eq(userConnectorConfigs.connectorId, ownerConnector.id),
+          eq(userConnectorConfigs.enabled, true),
+        )
+      )
+      .limit(1)
+
+    if (!userConfig) {
+      throw new Error(
+        `${ownerConnector.name} is not configured or not enabled. Update it at /connectors.`
+      )
+    }
+
+    decryptedConfig = JSON.parse(decrypt(userConfig.encryptedConfig)) as Record<string, string>
+  }
+
+  const credHeaders = buildHeaders(manifest, decryptedConfig)
+  const credParams  = buildSearchParams(manifest, decryptedConfig)
+
+  // Check log policy for this connector
+  const [policy] = await db
+    .select({ logToolCalls: connectorPolicies.logToolCalls })
+    .from(connectorPolicies)
+    .where(eq(connectorPolicies.connectorId, ownerConnector.id))
+    .limit(1)
+
+  const shouldLog = policy?.logToolCalls ?? true
+
+  const startMs = Date.now()
+  let success = true
+  let errorMessage: string | undefined
+
+  try {
+    const result = await proxyToConnector(
+      ownerConnector,
+      'tools/call',
+      { name: toolName, arguments: args },
+      credHeaders,
+      credParams,
+    )
+    return result
+  } catch (err) {
+    success = false
+    errorMessage = err instanceof Error ? err.message : 'Unknown error'
+    throw err
+  } finally {
+    if (shouldLog) {
+      // Fire-and-forget — don't block the response on log write
+      void db.insert(auditLogs).values({
+        actorId:     userId,
+        connectorId: ownerConnector.id,
+        action:      'tool.called',
+        detail:      {
+          toolName,
+          durationMs: Date.now() - startMs,
+          success,
+          ...(errorMessage ? { error: errorMessage } : {}),
+        },
+      })
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// JSON-RPC handler
+// ---------------------------------------------------------------------------
+
+export async function handleJsonRpc(request: JsonRpcRequest, userId: string): Promise<JsonRpcResponse> {
+  try {
+    switch (request.method) {
+      case 'initialize':
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            protocolVersion: '2024-11-05',
+            capabilities: { tools: { listChanged: false } },
+            serverInfo: { name: 'Manifold', version: '1.0.0' },
+          },
+        }
+
+      case 'tools/list': {
+        const tools = await getEnabledTools(userId)
+        return { jsonrpc: '2.0', id: request.id, result: { tools } }
+      }
+
+      case 'tools/call': {
+        const { name, arguments: toolArgs } = request.params as { name: string; arguments: unknown }
+        const result = await proxyToolCall(userId, name, toolArgs)
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result,
+        }
+      }
+
+      default:
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: { code: -32601, message: `Method not found: ${request.method}` },
+        }
+    }
+  } catch (err) {
+    return {
+      jsonrpc: '2.0',
+      id: request.id,
+      error: { code: -32000, message: err instanceof Error ? err.message : 'Internal error' },
+    }
+  }
+}

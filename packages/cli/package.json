@@ -1,0 +1,24 @@
+{
+  "name": "@manifold/cli",
+  "version": "0.1.0",
+  "description": "CLI for managing a Manifold MCP gateway instance",
+  "type": "module",
+  "bin": {
+    "manifold": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

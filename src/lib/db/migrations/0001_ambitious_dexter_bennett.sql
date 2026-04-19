@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "uq_user_connector" ON "user_connector_configs" USING btree ("user_id","connector_id");

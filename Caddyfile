@@ -1,0 +1,7 @@
+{$MANIFOLD_DOMAIN} {
+    reverse_proxy app:3000 {
+        # Required for MCP SSE connections — disable Caddy buffering
+        flush_interval -1
+        header_up Connection "keep-alive"
+    }
+}
