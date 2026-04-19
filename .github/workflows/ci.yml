@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: Type check & build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm tsc --noEmit
+
+      - name: Build
+        run: pnpm build
+        env:
+          # Stub required env vars so Next.js build doesn't fail on missing values
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/manifold
+          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_SECRET: ci-secret-at-least-32-characters-long
+          GOOGLE_CLIENT_ID: ci-google-client-id
+          GOOGLE_CLIENT_SECRET: ci-google-client-secret
+          ALLOWED_EMAIL_DOMAIN: example.com
+          ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+          ENCRYPTION_KEY_VERSION: "1"
+          NEXT_PUBLIC_APP_URL: http://localhost:3000

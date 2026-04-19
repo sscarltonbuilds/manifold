@@ -7,6 +7,7 @@ import { LogoMark } from './logo-mark'
 import { UserMenu } from './user-menu'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
+import { useMcpHealth } from '@/hooks/use-mcp-health'
 
 const NAV_ITEMS = [
   { href: '/connectors', label: 'Connectors', icon: Plug },
@@ -21,6 +22,7 @@ interface SidebarProps {
 export function Sidebar({ isAdmin, orgLogoUrl }: SidebarProps) {
   const pathname = usePathname()
   const [copied, setCopied] = useState(false)
+  const mcpHealth = useMcpHealth()
 
   const mcpUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/mcp'
 
@@ -81,9 +83,30 @@ export function Sidebar({ isAdmin, orgLogoUrl }: SidebarProps) {
         {/* MCP URL shortcut */}
         <div className="px-3 pb-3">
           <div className="bg-[#1A1917] border border-[#2A2926] rounded-[8px] px-3 py-2.5">
-            <p className="text-[#6B6966] text-[10px] font-semibold uppercase tracking-[0.08em] mb-1.5">
-              MCP endpoint
-            </p>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[#6B6966] text-[10px] font-semibold uppercase tracking-[0.08em]">
+                MCP endpoint
+              </p>
+              <span className="flex items-center gap-1">
+                <span
+                  className={cn(
+                    'w-1.5 h-1.5 rounded-full',
+                    mcpHealth === 'online'   && 'bg-[#4A7C59]',
+                    mcpHealth === 'offline'  && 'bg-[#A3352B]',
+                    mcpHealth === 'checking' && 'bg-[#6B6966] animate-pulse',
+                  )}
+                />
+                <span className={cn(
+                  'text-[9px] font-medium',
+                  mcpHealth === 'online'   && 'text-[#4A7C59]',
+                  mcpHealth === 'offline'  && 'text-[#A3352B]',
+                  mcpHealth === 'checking' && 'text-[#6B6966]',
+                )}>
+                  {mcpHealth === 'online'   ? 'Online' :
+                   mcpHealth === 'offline'  ? 'Offline' : '…'}
+                </span>
+              </span>
+            </div>
             <div className="flex items-center gap-2">
               <code className="text-[#C4853A] font-mono text-[10px] flex-1 truncate">/mcp</code>
               <button
