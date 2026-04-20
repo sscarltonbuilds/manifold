@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
 import { connectors, connectorPolicies, auditLogs } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
@@ -14,21 +14,17 @@ const BodySchema = z.object({
   message: 'Provide either manifestUrl or manifest',
 })
 
-export async function GET(_req: NextRequest) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+export async function GET(req: NextRequest) {
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const rows = await db.select().from(connectors).orderBy(connectors.createdAt)
   return NextResponse.json({ connectors: rows })
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const rawBody = await req.json()
   const bodyParsed = BodySchema.safeParse(rawBody)
@@ -139,8 +135,8 @@ export async function POST(req: NextRequest) {
     manifest:          manifest,
     discoveredTools:   discoveredTools,
     toolsDiscoveredAt: new Date(),
-    submittedBy:       session.user.id,
-    approvedBy:        session.user.id,
+    submittedBy:       admin.userId,
+    approvedBy:        admin.userId,
   })
 
   // Create default policy row
@@ -148,7 +144,7 @@ export async function POST(req: NextRequest) {
 
   // Audit log
   await db.insert(auditLogs).values({
-    actorId:     session.user.id,
+    actorId:     admin.userId,
     connectorId: manifest.id,
     action:      'connector.registered',
     detail:      { name: manifest.name, toolCount: discoveredTools.length },

@@ -3,10 +3,12 @@ import { db } from '@/lib/db'
 import { connectors, userConnectorConfigs, userBundles, bundleConnectors, bundles } from '@/lib/db/schema'
 import { eq, ne } from 'drizzle-orm'
 import { ConnectorCard } from '@/components/connectors/connector-card'
+import { OAuthResultToast } from '@/components/connectors/oauth-result-toast'
 import { redirect } from 'next/navigation'
 import { Plug } from 'lucide-react'
 import { getAuthFields } from '@/lib/manifest'
 import type { Manifest } from '@/lib/manifest'
+import { Suspense } from 'react'
 
 export default async function ConnectorsPage() {
   const session = await auth()
@@ -41,6 +43,7 @@ export default async function ConnectorsPage() {
   if (activeConnectors.length === 0) {
     return (
       <div className="p-8 max-w-5xl">
+        <Suspense><OAuthResultToast /></Suspense>
         <div className="mb-8">
           <h1 className="text-[#1A1917] text-2xl font-medium tracking-tight">Connectors</h1>
           <p className="text-[#6B6966] text-sm mt-1">Connect your tools to your AI assistant.</p>
@@ -58,6 +61,7 @@ export default async function ConnectorsPage() {
 
   return (
     <div className="p-8 max-w-5xl">
+      <Suspense><OAuthResultToast /></Suspense>
       <div className="mb-8">
         <h1 className="text-[#1A1917] text-2xl font-medium tracking-tight">Connectors</h1>
         <p className="text-[#6B6966] text-sm mt-1">Connect your tools to your AI assistant.</p>

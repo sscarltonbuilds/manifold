@@ -32,6 +32,9 @@ jobs:
       - name: Type check
         run: pnpm tsc --noEmit
 
+      - name: Build CLI
+        run: pnpm --filter @manifold/cli build
+
       - name: Build
         run: pnpm build
         env:

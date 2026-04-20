@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
 import { bundles, bundleConnectors, auditLogs } from '@/lib/db/schema'
 import { sql } from 'drizzle-orm'
@@ -12,11 +12,9 @@ const CreateSchema = z.object({
   connectorIds: z.array(z.string()).default([]),
 })
 
-export async function GET() {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+export async function GET(req: Request) {
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const rows = await db
     .select({
@@ -35,10 +33,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const parsed = CreateSchema.safeParse(await req.json())
   if (!parsed.success) {
@@ -49,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   const [bundle] = await db
     .insert(bundles)
-    .values({ name, description, emoji, createdBy: session.user.id })
+    .values({ name, description, emoji, createdBy: admin.userId })
     .returning()
 
   if (connectorIds.length > 0) {
@@ -59,7 +55,7 @@ export async function POST(req: NextRequest) {
   }
 
   await db.insert(auditLogs).values({
-    actorId: session.user.id,
+    actorId: admin.userId,
     action:  'bundle.created',
     detail:  { bundleId: bundle.id, name },
   })

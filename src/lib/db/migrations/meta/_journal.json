@@ -57,6 +57,13 @@
       "when": 1776670309463,
       "tag": "0007_elite_vertigo",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776674390023,
+      "tag": "0008_whole_fabian_cortez",
+      "breakpoints": true
     }
   ]
 }

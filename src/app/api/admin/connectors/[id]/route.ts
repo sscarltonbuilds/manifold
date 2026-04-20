@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
 import { connectors, auditLogs } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
@@ -13,11 +13,9 @@ const PatchSchema = z.object({
   iconUrl:  z.string().max(2_000_000).nullable().optional(),
 }).strict()
 
-export async function GET(_req: NextRequest, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+export async function GET(req: NextRequest, { params }: RouteParams) {
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id } = await params
   const [row] = await db.select().from(connectors).where(eq(connectors.id, id)).limit(1)
@@ -26,10 +24,8 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id } = await params
   const [existing] = await db.select().from(connectors).where(eq(connectors.id, id)).limit(1)
@@ -45,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     .where(eq(connectors.id, id))
 
   await db.insert(auditLogs).values({
-    actorId:     session.user.id,
+    actorId:     admin.userId,
     connectorId: id,
     action:      'connector.updated',
     detail:      parsed.data,
@@ -54,11 +50,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(_req: NextRequest, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+export async function DELETE(req: NextRequest, { params }: RouteParams) {
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id } = await params
   const [existing] = await db.select().from(connectors).where(eq(connectors.id, id)).limit(1)
@@ -70,7 +64,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
     .where(eq(connectors.id, id))
 
   await db.insert(auditLogs).values({
-    actorId:     session.user.id,
+    actorId:     admin.userId,
     connectorId: id,
     action:      'connector.deprecated',
     detail:      { name: existing.name },

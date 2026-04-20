@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
 import { oauthTokens, users, userConnectorConfigs, connectors, connectorPolicies, connectorAdminConfigs, auditLogs } from '@/lib/db/schema'
 import { eq, and, gt } from 'drizzle-orm'
-import { hashToken, decrypt } from '@/lib/crypto'
+import { hashToken, decrypt, encrypt, computeConfigHmac } from '@/lib/crypto'
 import type { User, Connector } from '@/lib/db/schema'
 import type { JsonRpcRequest, JsonRpcResponse, McpTool } from './types'
 import type { Manifest, Injection } from '@/lib/manifest'
@@ -182,6 +182,11 @@ function buildHeaders(
     }
   }
 
+  if (auth.type === 'oauth2') {
+    const tokenInfo = decryptedConfig as unknown as { access_token: string; token_type?: string }
+    headers['Authorization'] = `Bearer ${tokenInfo.access_token}`
+  }
+
   return headers
 }
 
@@ -205,6 +210,84 @@ function buildSearchParams(
   }
 
   return params
+}
+
+// ---------------------------------------------------------------------------
+// OAuth2 token refresh
+// ---------------------------------------------------------------------------
+
+async function refreshOAuthTokenIfNeeded(
+  userId: string,
+  connector: Connector,
+  manifest: Manifest,
+  config: Record<string, string>,
+): Promise<Record<string, string>> {
+  const tokenInfo = config as unknown as {
+    access_token: string
+    refresh_token?: string | null
+    expires_at?: number | null
+  }
+
+  if (!tokenInfo.expires_at) return config
+  if (Date.now() < tokenInfo.expires_at - 60_000) return config // still valid (with 1-min buffer)
+  if (!tokenInfo.refresh_token) return config // expired but no refresh token — let it fail naturally
+
+  const [adminCfg] = await db
+    .select()
+    .from(connectorAdminConfigs)
+    .where(eq(connectorAdminConfigs.connectorId, connector.id))
+    .limit(1)
+
+  if (!adminCfg) return config
+
+  const oauthCreds = JSON.parse(decrypt(adminCfg.encryptedConfig)) as { client_id?: string; client_secret?: string }
+  if (!oauthCreds.client_id || !oauthCreds.client_secret) return config
+
+  try {
+    const auth = manifest.auth
+    if (auth.type !== 'oauth2') return config
+
+    const res = await fetch(auth.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type:    'refresh_token',
+        refresh_token: tokenInfo.refresh_token,
+        client_id:     oauthCreds.client_id,
+        client_secret: oauthCreds.client_secret,
+      }),
+    })
+    if (!res.ok) return config // refresh failed, try with old token
+
+    const data = await res.json() as {
+      access_token: string
+      refresh_token?: string
+      expires_in?: number
+    }
+
+    const newConfig = {
+      access_token:  data.access_token,
+      refresh_token: data.refresh_token ?? tokenInfo.refresh_token,
+      expires_at:    data.expires_in ? Date.now() + data.expires_in * 1000 : null,
+      token_type:    'Bearer',
+    }
+
+    // Persist refreshed token
+    const configPayload   = JSON.stringify(newConfig)
+    const encryptedConfig = encrypt(configPayload)
+    const configHmac      = computeConfigHmac(userId, connector.id, encryptedConfig)
+
+    await db.update(userConnectorConfigs)
+      .set({ encryptedConfig, configHmac, updatedAt: new Date() })
+      .where(and(
+        eq(userConnectorConfigs.userId, userId),
+        eq(userConnectorConfigs.connectorId, connector.id),
+      ))
+
+    return newConfig as unknown as Record<string, string>
+  } catch {
+    return config // on error, try with existing token
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -317,6 +400,11 @@ export async function proxyToolCall(
     }
 
     decryptedConfig = JSON.parse(decrypt(userConfig.encryptedConfig)) as Record<string, string>
+
+    // Refresh oauth2 token if expired
+    if (manifest.auth.type === 'oauth2') {
+      decryptedConfig = await refreshOAuthTokenIfNeeded(userId, ownerConnector, manifest, decryptedConfig)
+    }
   }
 
   const credHeaders = buildHeaders(manifest, decryptedConfig)

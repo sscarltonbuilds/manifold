@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
 import { connectors, connectorPolicies, auditLogs } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
@@ -15,11 +15,9 @@ const PolicySchema = z.object({
   rateLimitPerHour: z.record(z.string(), z.number().int().positive()).nullable().optional(),
 })
 
-export async function GET(_req: NextRequest, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+export async function GET(req: NextRequest, { params }: RouteParams) {
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id } = await params
   const [policy] = await db.select().from(connectorPolicies).where(eq(connectorPolicies.connectorId, id)).limit(1)
@@ -28,10 +26,8 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id } = await params
   const [connector] = await db.select().from(connectors).where(eq(connectors.id, id)).limit(1)
@@ -51,7 +47,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     })
 
   await db.insert(auditLogs).values({
-    actorId:     session.user.id,
+    actorId:     admin.userId,
     connectorId: id,
     action:      'connector.policy_updated',
     detail:      parsed.data,

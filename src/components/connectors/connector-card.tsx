@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plug, CheckCircle2, Circle, Settings2, Lock } from 'lucide-react'
+import { Plug, CheckCircle2, Circle, Settings2, Lock, Link2 } from 'lucide-react'
 import { ConnectorConfigSheet } from './connector-config-sheet'
 import { toast } from 'sonner'
 import type { AuthField } from '@/lib/manifest'
@@ -39,10 +39,19 @@ export function ConnectorCard({
 
   // For admin_managed / none connectors there's nothing to configure per-user
   const needsUserConfig = connector.managedBy === 'user' && connector.authType !== 'none'
+  const isOAuth2 = connector.authType === 'oauth2'
+
+  const startOAuthFlow = () => {
+    window.location.href = `/api/connectors/${connector.id}/oauth/start`
+  }
 
   const handleToggle = async () => {
     if (!configured && !enabled && needsUserConfig) {
-      setSheetOpen(true)
+      if (isOAuth2) {
+        startOAuthFlow()
+      } else {
+        setSheetOpen(true)
+      }
       return
     }
     setToggling(true)
@@ -132,18 +141,28 @@ export function ConnectorCard({
           </div>
 
           {needsUserConfig && (
-            <button
-              onClick={() => setSheetOpen(true)}
-              className="flex items-center gap-1 text-[#9C9890] hover:text-[#1A1917] transition-colors"
-            >
-              <Settings2 size={13} />
-              <span className="text-xs">Configure</span>
-            </button>
+            isOAuth2 ? (
+              <button
+                onClick={startOAuthFlow}
+                className="flex items-center gap-1 text-[#9C9890] hover:text-[#1A1917] transition-colors"
+              >
+                <Link2 size={13} />
+                <span className="text-xs">{configured ? 'Reconnect' : 'Connect'}</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setSheetOpen(true)}
+                className="flex items-center gap-1 text-[#9C9890] hover:text-[#1A1917] transition-colors"
+              >
+                <Settings2 size={13} />
+                <span className="text-xs">Configure</span>
+              </button>
+            )
           )}
         </div>
       </div>
 
-      {needsUserConfig && (
+      {needsUserConfig && !isOAuth2 && (
         <ConnectorConfigSheet
           connectorId={connector.id}
           connectorName={connector.name}

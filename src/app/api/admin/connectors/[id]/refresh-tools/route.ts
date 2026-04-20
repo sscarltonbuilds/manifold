@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
 import { connectors, auditLogs } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
@@ -21,11 +21,9 @@ function diffTools(
   }
 }
 
-export async function POST(_req: NextRequest, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+export async function POST(req: NextRequest, { params }: RouteParams) {
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id } = await params
   const [connector] = await db.select().from(connectors).where(eq(connectors.id, id)).limit(1)
@@ -48,7 +46,7 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
       .where(eq(connectors.id, id))
 
     await db.insert(auditLogs).values({
-      actorId:     session.user.id,
+      actorId:     admin.userId,
       connectorId: id,
       action:      'connector.health_check_failed',
       detail:      { error: err instanceof Error ? err.message : 'Discovery failed' },
@@ -78,7 +76,7 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
 
   // Always log the refresh
   await db.insert(auditLogs).values({
-    actorId:     session.user.id,
+    actorId:     admin.userId,
     connectorId: id,
     action:      'connector.tools_refreshed',
     detail:      { toolCount: newTools.length, added: added.length, removed: removed.length },
@@ -87,7 +85,7 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
   // Log drift events separately so they surface in the overview
   if (added.length > 0) {
     await db.insert(auditLogs).values({
-      actorId:     session.user.id,
+      actorId:     admin.userId,
       connectorId: id,
       action:      'connector.tools_added',
       detail:      { tools: added },
@@ -95,7 +93,7 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
   }
   if (removed.length > 0) {
     await db.insert(auditLogs).values({
-      actorId:     session.user.id,
+      actorId:     admin.userId,
       connectorId: id,
       action:      'connector.tools_removed',
       detail:      { tools: removed },

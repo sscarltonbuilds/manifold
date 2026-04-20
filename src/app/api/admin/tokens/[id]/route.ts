@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
 import { oauthTokens, auditLogs } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
-export async function DELETE(_req: NextRequest, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+export async function DELETE(req: NextRequest, { params }: RouteParams) {
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id } = await params
 
@@ -20,7 +18,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
   await db.delete(oauthTokens).where(eq(oauthTokens.id, id))
 
   await db.insert(auditLogs).values({
-    actorId:      session.user.id,
+    actorId:      admin.userId,
     targetUserId: token.userId,
     action:       'token.revoked',
     detail:       { tokenId: id, clientId: token.clientId },

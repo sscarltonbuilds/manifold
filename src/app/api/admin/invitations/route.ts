@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
 import { invitations, auditLogs } from '@/lib/db/schema'
 import { isNull } from 'drizzle-orm'
@@ -11,11 +11,9 @@ const PostSchema = z.object({
   role:  z.enum(['member', 'admin']).default('member'),
 })
 
-export async function GET() {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+export async function GET(req: Request) {
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
   const pending = await db
     .select()
     .from(invitations)
@@ -24,10 +22,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
   const parsed = PostSchema.safeParse(await req.json())
   if (!parsed.success) {
     return NextResponse.json({ error: { code: 'validation_error', message: parsed.error.message } }, { status: 400 })
@@ -40,11 +36,11 @@ export async function POST(req: NextRequest) {
     role,
     token,
     expiresAt,
-    invitedBy: session.user.id,
+    invitedBy: admin.userId,
   }).returning()
 
   await db.insert(auditLogs).values({
-    actorId: session.user.id,
+    actorId: admin.userId,
     action: 'user.invited',
     detail: { email, role },
   })

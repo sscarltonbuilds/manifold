@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { RefreshCw, Loader2, Trash2 } from 'lucide-react'
+import { RefreshCw, Loader2, Trash2, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ChangeEvent } from 'react'
 import { CopyButton } from '@/components/shared/copy-button'
@@ -282,6 +282,105 @@ function IconEditor({
 }
 
 // ---------------------------------------------------------------------------
+// Admin Credentials Panel
+// ---------------------------------------------------------------------------
+
+function AdminCredentialsPanel({ connectorId, authType }: { connectorId: string; authType: string }) {
+  const isOAuth2 = authType === 'oauth2'
+  const [saving, setSaving]           = useState(false)
+  const [showSecret, setShowSecret]   = useState(false)
+  const [fields, setFields]           = useState<Record<string, string>>({})
+
+  const fieldDefs = isOAuth2
+    ? [
+        { key: 'client_id',     label: 'Client ID',     secret: false, placeholder: 'OAuth client ID from the provider' },
+        { key: 'client_secret', label: 'Client Secret', secret: true,  placeholder: 'OAuth client secret from the provider' },
+      ]
+    : []
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/connectors/${connectorId}/admin-credentials`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      })
+      if (res.ok) {
+        toast.success('Credentials saved')
+      } else {
+        const data = await res.json() as { error?: { message?: string } }
+        toast.error(data.error?.message ?? 'Failed to save')
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!isOAuth2) {
+    return (
+      <div className="bg-white border border-[#E3E1DC] rounded-[10px] p-5">
+        <p className="text-[#1A1917] text-sm font-medium mb-1">Org-level credentials</p>
+        <p className="text-[#6B6966] text-sm">
+          These credentials are injected for all users of this connector. Configure them via the API:
+        </p>
+        <div className="mt-3 bg-[#0D0D0B] rounded-[8px] px-4 py-3">
+          <code className="text-[#C4853A] font-mono text-xs">
+            PUT /api/admin/connectors/{connectorId}/credentials
+          </code>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white border border-[#E3E1DC] rounded-[10px] p-5">
+      <p className="text-[#1A1917] text-sm font-medium mb-1">OAuth client credentials</p>
+      <p className="text-[#6B6966] text-sm mb-4">
+        Register a Manifold OAuth app with the provider and paste the credentials here. These are used when users authorise access.
+      </p>
+
+      <div className="flex flex-col gap-3">
+        {fieldDefs.map(f => (
+          <div key={f.key}>
+            <label className="block text-[#6B6966] text-xs font-medium uppercase tracking-[0.06em] mb-1.5">
+              {f.label}
+            </label>
+            <div className="relative">
+              <input
+                type={f.secret && !showSecret ? 'password' : 'text'}
+                value={fields[f.key] ?? ''}
+                onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value }))}
+                placeholder={f.placeholder}
+                className="w-full h-9 px-3 text-[13px] text-[#1A1917] bg-white border border-[#E3E1DC] rounded-[6px] focus:outline-none focus:border-[#C4853A] transition-colors placeholder:text-[#9C9890]"
+              />
+              {f.secret && (
+                <button
+                  type="button"
+                  onClick={() => setShowSecret(v => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9C9890] hover:text-[#1A1917] transition-colors"
+                >
+                  {showSecret ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={save}
+        disabled={saving || !fields['client_id']?.trim() || !fields['client_secret']?.trim()}
+        className="mt-4 px-4 py-2 text-sm font-semibold text-[#1A1917] bg-[#C4853A] hover:bg-[#E8A855] rounded-[8px] transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
+      >
+        {saving ? <Loader2 size={13} className="animate-spin" /> : null}
+        Save credentials
+      </button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -310,8 +409,11 @@ export function ConnectorDetailClient({ connector, policy: initialPolicy, enable
 
   const tools = connector.discoveredTools ?? []
 
-  // Show credentials tab only when admin-managed and actually has credentials
-  const showCredentials = connector.managedBy === 'admin' && connector.authType !== 'none'
+  // Show credentials tab for admin-managed connectors (non-none auth) or oauth2 connectors
+  // For oauth2, admin must configure client_id + client_secret regardless of managedBy
+  const showCredentials =
+    (connector.managedBy === 'admin' && connector.authType !== 'none') ||
+    connector.authType === 'oauth2'
 
   const TABS: { key: Tab; label: string }[] = [
     { key: 'overview',    label: 'Overview' },
@@ -621,19 +723,9 @@ export function ConnectorDetailClient({ connector, policy: initialPolicy, enable
         </div>
       )}
 
-      {/* ── Credentials (admin-managed, non-none auth only) ── */}
+      {/* ── Credentials (admin-managed or oauth2) ── */}
       {tab === 'credentials' && (
-        <div className="bg-white border border-[#E3E1DC] rounded-[10px] p-5">
-          <p className="text-[#1A1917] text-sm font-medium mb-1">Org-level credentials</p>
-          <p className="text-[#6B6966] text-sm">
-            These credentials are injected for all users of this connector. Configure them via the API:
-          </p>
-          <div className="mt-3 bg-[#0D0D0B] rounded-[8px] px-4 py-3">
-            <code className="text-[#C4853A] font-mono text-xs">
-              PUT /api/admin/connectors/{connector.id}/credentials
-            </code>
-          </div>
-        </div>
+        <AdminCredentialsPanel connectorId={connector.id} authType={connector.authType} />
       )}
     </div>
   )

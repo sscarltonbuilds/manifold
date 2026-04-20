@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
 import { bundles, bundleConnectors, userBundles, connectors, auditLogs } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
@@ -7,11 +7,9 @@ import { z } from 'zod'
 
 type RouteParams = { params: Promise<{ id: string }> }
 
-export async function GET(_req: NextRequest, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+export async function GET(req: NextRequest, { params }: RouteParams) {
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id } = await params
 
@@ -54,10 +52,8 @@ const PatchSchema = z.object({
 })
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id } = await params
   const [bundle] = await db.select().from(bundles).where(eq(bundles.id, id)).limit(1)
@@ -86,11 +82,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(_req: NextRequest, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+export async function DELETE(req: NextRequest, { params }: RouteParams) {
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id } = await params
   const [bundle] = await db.select().from(bundles).where(eq(bundles.id, id)).limit(1)
@@ -99,7 +93,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
   await db.delete(bundles).where(eq(bundles.id, id))
 
   await db.insert(auditLogs).values({
-    actorId: session.user.id,
+    actorId: admin.userId,
     action:  'bundle.deleted',
     detail:  { bundleId: id, name: bundle.name },
   })

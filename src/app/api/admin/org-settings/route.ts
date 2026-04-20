@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
 import { orgSettings } from '@/lib/db/schema'
 import { z } from 'zod'
@@ -25,10 +26,8 @@ const PutSchema = z.object({
 })
 
 export async function PUT(req: NextRequest) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const parsed = PutSchema.safeParse(await req.json())
   if (!parsed.success) {

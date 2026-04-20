@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
 import { connectors, userConnectorConfigs, auditLogs } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
@@ -10,11 +10,9 @@ import { z } from 'zod'
 
 type RouteParams = { params: Promise<{ id: string; connectorId: string }> }
 
-export async function GET(_req: NextRequest, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+export async function GET(req: NextRequest, { params }: RouteParams) {
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id: userId, connectorId } = await params
   const [connector] = await db.select().from(connectors).where(eq(connectors.id, connectorId)).limit(1)
@@ -36,7 +34,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
   }
   // Log admin access to user credentials
   await db.insert(auditLogs).values({
-    actorId:      session.user.id,
+    actorId:      admin.userId,
     targetUserId: userId,
     connectorId,
     action:       'config.accessed_by_admin',
@@ -56,10 +54,8 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id: userId, connectorId } = await params
   const [connector] = await db.select().from(connectors).where(eq(connectors.id, connectorId)).limit(1)
@@ -98,7 +94,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     })
 
   await db.insert(auditLogs).values({
-    actorId:      session.user.id,
+    actorId:      admin.userId,
     targetUserId: userId,
     connectorId,
     action:       'config.updated_by_admin',

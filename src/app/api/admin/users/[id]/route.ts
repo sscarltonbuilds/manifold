@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
 import { users, connectors, userConnectorConfigs, auditLogs } from '@/lib/db/schema'
 import { eq, ne } from 'drizzle-orm'
@@ -7,13 +7,11 @@ import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id } = await params
   const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1)
@@ -43,14 +41,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user?.id || session.user.role !== 'admin') {
-    return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
-  }
+  const admin = await requireAdmin(req)
+  if (!admin) return NextResponse.json({ error: { code: 'forbidden' } }, { status: 403 })
 
   const { id } = await params
 
-  if (id === session.user.id) {
+  if (id === admin.userId) {
     return NextResponse.json(
       { error: { code: 'forbidden', message: 'Cannot change your own role' } },
       { status: 403 }
@@ -78,7 +74,7 @@ export async function PATCH(
   await db.update(users).set({ role: body.data.role }).where(eq(users.id, id))
 
   await db.insert(auditLogs).values({
-    actorId:      session.user.id,
+    actorId:      admin.userId,
     targetUserId: id,
     action:       'user.role_changed',
     detail:       { newRole: body.data.role },

@@ -139,6 +139,24 @@ export const userBundles = pgTable('user_bundles', {
   assignedAt: timestamp('assigned_at').notNull().defaultNow(),
 }, t => [uniqueIndex('uq_user_bundle').on(t.userId, t.bundleId)])
 
+export const adminApiKeys = pgTable('admin_api_keys', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  name:       text('name').notNull(),
+  keyHash:    text('key_hash').notNull().unique(),
+  createdBy:  uuid('created_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  lastUsedAt: timestamp('last_used_at'),
+})
+
+export const connectorOAuthStates = pgTable('connector_oauth_states', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  state:       text('state').notNull().unique(),
+  userId:      uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  connectorId: text('connector_id').notNull().references(() => connectors.id, { onDelete: 'cascade' }),
+  expiresAt:   timestamp('expires_at').notNull(),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+})
+
 // Type exports
 export type OrgSetting          = typeof orgSettings.$inferSelect
 export type User                = typeof users.$inferSelect
@@ -151,6 +169,8 @@ export type OAuthClient         = typeof oauthClients.$inferSelect
 export type AuditLog            = typeof auditLogs.$inferSelect
 export type Invitation          = typeof invitations.$inferSelect
 export type NewUser             = typeof users.$inferInsert
-export type Bundle            = typeof bundles.$inferSelect
-export type BundleConnector   = typeof bundleConnectors.$inferSelect
-export type UserBundle        = typeof userBundles.$inferSelect
+export type Bundle              = typeof bundles.$inferSelect
+export type BundleConnector     = typeof bundleConnectors.$inferSelect
+export type UserBundle          = typeof userBundles.$inferSelect
+export type AdminApiKey         = typeof adminApiKeys.$inferSelect
+export type ConnectorOAuthState = typeof connectorOAuthStates.$inferSelect
