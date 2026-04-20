@@ -4,7 +4,7 @@ import { rateLimit } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get('x-forwarded-for') ?? 'unknown'
-  if (!rateLimit(`oauth:${ip}`, 20, 60_000)) {
+  if (!await rateLimit(`oauth:${ip}`, 20, 60_000)) {
     return NextResponse.json(
       { error: 'slow_down' },
       { status: 429, headers: { 'Retry-After': '60' } }
