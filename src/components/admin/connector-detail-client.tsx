@@ -40,13 +40,13 @@ function Toggle({
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`relative w-10 h-[22px] rounded-full transition-colors duration-150 flex-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C4853A] ${
+      className={`relative w-10 h-[22px] rounded-full transition-colors duration-150 flex-none overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C4853A] ${
         checked ? 'bg-[#C4853A]' : 'bg-[#3A3836]'
       }`}
     >
       <span
-        className={`absolute top-[3px] w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-150 ${
-          checked ? 'translate-x-[22px]' : 'translate-x-[3px]'
+        className={`absolute top-[3px] left-0 w-4 h-4 rounded-full bg-white ring-1 ring-black/10 transition-transform duration-150 ${
+          checked ? 'translate-x-[21px]' : 'translate-x-[3px]'
         }`}
       />
     </button>
