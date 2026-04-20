@@ -134,7 +134,7 @@ export default async function AdminConnectorsPage() {
                   '#9C9890'
 
                 return (
-                  <tr key={c.id} className="hover:bg-[#F5F4F0] transition-colors">
+                  <tr key={c.id} className="group hover:bg-[#F9F8F6] transition-colors">
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2.5">
                         {/* Health dot */}
@@ -183,14 +183,14 @@ export default async function AdminConnectorsPage() {
                     <td className="px-5 py-3.5 text-[#6B6966]">{countMap.get(c.id) ?? 0}</td>
                     <td className="px-5 py-3.5 text-[#6B6966]">{toolCount}</td>
                     <td className="px-5 py-3.5 text-[#6B6966] font-mono text-xs">{c.version}</td>
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center justify-end gap-1">
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                         <RefreshConnectorButton connectorId={c.id} />
                         <Link
                           href={`/admin/connectors/${c.id}`}
-                          className="text-xs text-[#9C9890] hover:text-[#C4853A] transition-colors px-1"
+                          className="h-7 px-3 inline-flex items-center text-xs font-medium text-[#1A1917] bg-white border border-[#E3E1DC] rounded-[6px] hover:bg-[#F5F4F0] hover:border-[#D4D0C8] transition-colors whitespace-nowrap"
                         >
-                          Manage →
+                          Manage
                         </Link>
                       </div>
                     </td>

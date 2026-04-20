@@ -35,7 +35,7 @@ export function RefreshConnectorButton({ connectorId }: RefreshConnectorButtonPr
       onClick={handleClick}
       disabled={state === 'loading'}
       title="Refresh tools"
-      className="p-1.5 rounded-[6px] text-[#9C9890] hover:text-[#1A1917] hover:bg-[#F5F4F0] transition-colors disabled:opacity-50"
+      className="h-7 w-7 flex items-center justify-center rounded-[6px] border border-[#E3E1DC] bg-white text-[#6B6966] hover:text-[#1A1917] hover:bg-[#F5F4F0] hover:border-[#D4D0C8] transition-colors disabled:opacity-50"
     >
       {state === 'loading' && <Loader2 size={13} className="animate-spin" />}
       {state === 'ok'      && <CheckCircle2 size={13} className="text-[#4A7C59]" />}
