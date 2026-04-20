@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { oauthTokens, users, userConnectorConfigs, connectors, connectorPolicies, connectorAdminConfigs, auditLogs } from '@/lib/db/schema'
 import { eq, and, gt } from 'drizzle-orm'
 import { hashToken, decrypt, encrypt, computeConfigHmac } from '@/lib/crypto'
+import { rateLimit } from '@/lib/rate-limit'
 import type { User, Connector } from '@/lib/db/schema'
 import type { JsonRpcRequest, JsonRpcResponse, McpTool } from './types'
 import type { Manifest, Injection } from '@/lib/manifest'
@@ -49,31 +50,32 @@ export async function resolveUser(authHeader: string): Promise<User | null> {
 // ---------------------------------------------------------------------------
 
 export async function getEnabledTools(userId: string): Promise<McpTool[]> {
-  // Load user's enabled connector configs
-  const configs = await db
-    .select({
-      connectorId: userConnectorConfigs.connectorId,
-    })
-    .from(userConnectorConfigs)
-    .where(and(eq(userConnectorConfigs.userId, userId), eq(userConnectorConfigs.enabled, true)))
+  // Load all active connectors + their policies in one pass
+  const [connectorRows, policyRows, userConfigs] = await Promise.all([
+    db.select().from(connectors).where(eq(connectors.status, 'active')),
+    db.select().from(connectorPolicies),
+    db
+      .select({ connectorId: userConnectorConfigs.connectorId })
+      .from(userConnectorConfigs)
+      .where(and(eq(userConnectorConfigs.userId, userId), eq(userConnectorConfigs.enabled, true))),
+  ])
 
-  if (configs.length === 0) return []
-
-  const connectorIds = configs.map(c => c.connectorId)
-
-  // Load active connectors + their policies
-  const connectorRows = await db.select().from(connectors)
-  const policyRows = await db.select().from(connectorPolicies)
-
-  const policyMap = new Map(policyRows.map(p => [p.connectorId, p]))
+  const policyMap   = new Map(policyRows.map(p => [p.connectorId, p]))
+  const enabledSet  = new Set(userConfigs.map(c => c.connectorId))
 
   const tools: McpTool[] = []
 
-  for (const { connectorId } of connectorIds.map(id => ({ connectorId: id }))) {
-    const connector = connectorRows.find(c => c.id === connectorId && c.status === 'active')
-    if (!connector) continue // connector removed or deprecated — skip gracefully
+  for (const connector of connectorRows) {
+    const policy       = policyMap.get(connector.id)
+    const isRequired   = policy?.required ?? false
+    const isAdminManaged = connector.managedBy === 'admin' || connector.authType === 'none'
 
-    const policy = policyMap.get(connectorId)
+    // Include tools from this connector if:
+    //   a) the user has explicitly enabled it, OR
+    //   b) it's required AND admin-managed (no per-user credentials needed)
+    const include = enabledSet.has(connector.id) || (isRequired && isAdminManaged)
+    if (!include) continue
+
     const disabledTools = new Set<string>(
       Array.isArray(policy?.disabledTools) ? (policy.disabledTools as string[]) : []
     )
@@ -410,12 +412,26 @@ export async function proxyToolCall(
   const credHeaders = buildHeaders(manifest, decryptedConfig)
   const credParams  = buildSearchParams(manifest, decryptedConfig)
 
-  // Check log policy for this connector
+  // Load policy — needed for rate limiting and logging
   const [policy] = await db
-    .select({ logToolCalls: connectorPolicies.logToolCalls })
+    .select({ logToolCalls: connectorPolicies.logToolCalls, rateLimitPerHour: connectorPolicies.rateLimitPerHour })
     .from(connectorPolicies)
     .where(eq(connectorPolicies.connectorId, ownerConnector.id))
     .limit(1)
+
+  // Per-tool rate limiting — enforced before the call
+  if (policy?.rateLimitPerHour) {
+    const limits = policy.rateLimitPerHour as Record<string, number>
+    const toolLimit = limits[toolName]
+    if (typeof toolLimit === 'number' && toolLimit > 0) {
+      const allowed = await rateLimit(`tool:${userId}:${toolName}`, toolLimit, 3_600_000)
+      if (!allowed) {
+        throw new Error(
+          `Rate limit exceeded for tool "${toolName}". Allowed ${toolLimit} calls per hour.`
+        )
+      }
+    }
+  }
 
   const shouldLog = policy?.logToolCalls ?? true
 
