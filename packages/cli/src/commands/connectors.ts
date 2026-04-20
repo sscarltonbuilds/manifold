@@ -1,143 +1,157 @@
 import { resolveAuth } from '../config.js'
 import { apiGet, apiPost, apiPatch } from '../api.js'
+import { c, spin, badge, fmtDate, kv, section, empty, confirm } from '../ui.js'
 
 interface ConnectorRow {
-  id:               string
-  name:             string
-  version:          string
-  status:           string
-  authType:         string
-  discoveredTools:  unknown[] | null
+  id:                string
+  name:              string
+  version:           string
+  status:            string
+  authType:          string
+  discoveredTools:   unknown[] | null
   toolsDiscoveredAt: string | null
   updatedAt:         string
 }
 
-interface ConnectorsListResponse {
-  connectors: ConnectorRow[]
+interface ConnectorsListResponse { connectors: ConnectorRow[] }
+
+interface ConnectorDetailRow extends ConnectorRow {
+  endpoint?: string
+  manifest?: unknown
 }
 
-interface ConnectorResponse {
-  connector: ConnectorRow & { endpoint?: string; manifest?: unknown }
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-}
+interface ConnectorResponse { connector: ConnectorDetailRow }
 
 export async function runConnectorsList(opts: { registry?: string; token?: string }): Promise<void> {
   const { registry, token } = resolveAuth(opts)
+  const s = spin('loading connectors')
 
   try {
     const { connectors } = await apiGet<ConnectorsListResponse>(registry, token, '/api/admin/connectors')
+    s.succeed(`${connectors.length} connector${connectors.length === 1 ? '' : 's'}`)
+    console.log('')
 
     if (connectors.length === 0) {
-      console.log('no connectors registered.')
+      empty('no connectors registered.')
+      console.log('')
       return
     }
 
-    const idWidth   = Math.max(2, ...connectors.map(c => c.id.length))
-    const nameWidth = Math.max(4, ...connectors.map(c => c.name.length))
+    const idW   = Math.max(2,  ...connectors.map(r => r.id.length))
+    const nameW = Math.max(4,  ...connectors.map(r => r.name.length))
+    const verW  = Math.max(7,  ...connectors.map(r => r.version.length))
 
     const header = [
-      'ID'.padEnd(idWidth),
-      'NAME'.padEnd(nameWidth),
-      'VERSION'.padEnd(9),
+      'ID'.padEnd(idW),
+      'NAME'.padEnd(nameW),
+      'VERSION'.padEnd(verW),
       'STATUS'.padEnd(12),
       'TOOLS'.padEnd(6),
       'UPDATED',
     ].join('  ')
 
-    console.log(header)
-    console.log('─'.repeat(header.length))
+    console.log(`  ${c.bold(c.gray(header))}`)
+    console.log(`  ${c.gray('─'.repeat(header.length))}`)
 
-    for (const c of connectors) {
-      const tools = Array.isArray(c.discoveredTools) ? String(c.discoveredTools.length) : '—'
-      console.log([
-        c.id.padEnd(idWidth),
-        c.name.padEnd(nameWidth),
-        c.version.padEnd(9),
-        c.status.padEnd(12),
+    for (const row of connectors) {
+      const tools   = Array.isArray(row.discoveredTools) ? String(row.discoveredTools.length) : '—'
+      const stat    = badge(row.status)
+      const statPad = stat + ' '.repeat(Math.max(0, 12 - row.status.length))
+      const cols = [
+        c.bold(row.id.padEnd(idW)),
+        row.name.padEnd(nameW),
+        c.gray(row.version.padEnd(verW)),
+        statPad,
         tools.padEnd(6),
-        formatDate(c.updatedAt),
-      ].join('  '))
+        c.gray(fmtDate(row.updatedAt)),
+      ]
+      console.log(`  ${cols.join('  ')}`)
     }
+    console.log('')
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error(`error: ${msg}`)
+    s.fail(err instanceof Error ? err.message : String(err))
+    console.log('')
     process.exit(1)
   }
 }
 
-export async function runConnectorsGet(
-  id: string,
-  opts: { registry?: string; token?: string },
-): Promise<void> {
+export async function runConnectorsGet(id: string, opts: { registry?: string; token?: string }): Promise<void> {
   const { registry, token } = resolveAuth(opts)
+  const s = spin(`loading ${c.amber(id)}`)
 
   try {
-    const { connector } = await apiGet<ConnectorResponse>(
-      registry, token, `/api/admin/connectors/${id}`,
-    )
+    const { connector } = await apiGet<ConnectorResponse>(registry, token, `/api/admin/connectors/${id}`)
+    const tools = Array.isArray(connector.discoveredTools)
+      ? connector.discoveredTools as Array<{ name: string; description?: string }>
+      : []
+    s.succeed(connector.name)
+    console.log('')
 
-    const tools = Array.isArray(connector.discoveredTools) ? connector.discoveredTools : []
-
-    console.log(`id         ${connector.id}`)
-    console.log(`name       ${connector.name}`)
-    console.log(`version    ${connector.version}`)
-    console.log(`status     ${connector.status}`)
-    console.log(`auth type  ${connector.authType}`)
-    if (connector.endpoint) console.log(`endpoint   ${connector.endpoint}`)
-    console.log(`tools      ${tools.length}`)
-    if (connector.toolsDiscoveredAt) {
-      console.log(`discovered ${formatDate(connector.toolsDiscoveredAt)}`)
-    }
+    kv('id',         c.amber(connector.id))
+    kv('version',    connector.version)
+    kv('status',     badge(connector.status))
+    kv('auth type',  connector.authType)
+    if (connector.endpoint) kv('endpoint', connector.endpoint)
+    kv('tools',      String(tools.length))
+    if (connector.toolsDiscoveredAt) kv('discovered', fmtDate(connector.toolsDiscoveredAt))
 
     if (tools.length > 0) {
-      console.log('')
-      console.log('tool list:')
-      for (const t of tools as Array<{ name: string; description?: string }>) {
-        const desc = t.description ? `  — ${t.description}` : ''
-        console.log(`  ${t.name}${desc}`)
+      section('tools')
+      for (const t of tools) {
+        const desc = t.description ? `  ${c.gray('—')}  ${c.gray(t.description)}` : ''
+        console.log(`  ${c.gray('·')}  ${t.name}${desc}`)
       }
     }
+    console.log('')
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error(`error: ${msg}`)
+    s.fail(err instanceof Error ? err.message : String(err))
+    console.log('')
     process.exit(1)
   }
 }
 
-export async function runConnectorsRefresh(
-  id: string,
-  opts: { registry?: string; token?: string },
-): Promise<void> {
+export async function runConnectorsRefresh(id: string, opts: { registry?: string; token?: string }): Promise<void> {
   const { registry, token } = resolveAuth(opts)
+  const s = spin(`refreshing tools for ${c.amber(id)}`)
 
   try {
     const res = await apiPost<{ ok: boolean; toolCount?: number }>(
       registry, token, `/api/admin/connectors/${id}/refresh-tools`, {},
     )
-    console.log(`refreshed. tools: ${res.toolCount ?? '—'}`)
+    s.succeed(`${res.toolCount ?? '—'} tool${res.toolCount === 1 ? '' : 's'} discovered`)
+    console.log('')
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error(`error: ${msg}`)
+    s.fail(err instanceof Error ? err.message : String(err))
+    console.log('')
     process.exit(1)
   }
 }
 
 export async function runConnectorsDeprecate(
-  id: string,
-  opts: { registry?: string; token?: string },
+  id:   string,
+  opts: { registry?: string; token?: string; yes?: boolean },
 ): Promise<void> {
+  console.log('')
+
+  if (!opts.yes) {
+    const ok = await confirm(`deprecate connector ${c.amber(`"${id}"`)}?`)
+    if (!ok) {
+      console.log(`  ${c.gray('cancelled.')}`)
+      console.log('')
+      return
+    }
+  }
+
   const { registry, token } = resolveAuth(opts)
+  const s = spin(`deprecating ${c.amber(id)}`)
 
   try {
     await apiPatch(registry, token, `/api/admin/connectors/${id}`, { status: 'deprecated' })
-    console.log(`connector "${id}" deprecated.`)
+    s.succeed(`${id} deprecated`)
+    console.log('')
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error(`error: ${msg}`)
+    s.fail(err instanceof Error ? err.message : String(err))
+    console.log('')
     process.exit(1)
   }
 }

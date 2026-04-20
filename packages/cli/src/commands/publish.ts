@@ -3,54 +3,53 @@ import { join } from 'node:path'
 import { ManifestSchema } from '../manifest.js'
 import { resolveAuth } from '../config.js'
 import { apiPost } from '../api.js'
+import { c, spin, kv, fatal } from '../ui.js'
 
 interface PublishResponse {
-  ok: boolean
+  ok:         boolean
   connector?: { id: string; name: string; toolCount: number }
 }
 
 export async function runPublish(opts: { registry?: string; token?: string }): Promise<void> {
   const manifestPath = join(process.cwd(), 'manifold.json')
+  console.log('')
 
   if (!existsSync(manifestPath)) {
-    console.error('error: no manifold.json found in current directory.')
-    process.exit(1)
+    fatal('no manifold.json found in current directory.')
   }
 
   let raw: unknown
   try {
     raw = JSON.parse(readFileSync(manifestPath, 'utf8'))
   } catch {
-    console.error('error: manifold.json is not valid JSON.')
-    process.exit(1)
+    fatal('manifold.json is not valid JSON.')
   }
 
   const result = ManifestSchema.safeParse(raw)
   if (!result.success) {
-    console.error('error: manifold.json schema validation failed. Run `manifold validate` for details.')
-    process.exit(1)
+    fatal(`schema validation failed. Run ${c.amber('manifold validate')} for details.`)
   }
 
   const { registry, token } = resolveAuth(opts)
 
-  console.log(`publishing "${result.data.id}" to ${registry} ...`)
+  const s = spin(`publishing ${c.amber(`"${result.data.id}"`)} to ${registry}`)
 
   try {
-    const res = await apiPost<PublishResponse>(registry, token, '/api/admin/connectors', {
-      manifest: raw,
-    })
+    const res = await apiPost<PublishResponse>(registry, token, '/api/admin/connectors', { manifest: raw })
 
     if (res.connector) {
+      s.succeed(`published ${c.amber(res.connector.name)}`)
       console.log('')
-      console.log(`published  ${res.connector.name}`)
-      console.log(`id         ${res.connector.id}`)
-      console.log(`tools      ${res.connector.toolCount}`)
+      kv('id',    res.connector.id)
+      kv('tools', String(res.connector.toolCount))
     } else {
-      console.log('published.')
+      s.succeed('published')
     }
+    console.log('')
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error(`error: ${msg}`)
+    s.fail(msg)
+    console.log('')
     process.exit(1)
   }
 }

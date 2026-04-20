@@ -1,5 +1,6 @@
 import { resolveAuth } from '../config.js'
 import { apiGet, apiPatch } from '../api.js'
+import { c, spin, badge, fmtDate, kv, section, empty } from '../ui.js'
 
 interface UserRow {
   id:           string
@@ -10,85 +11,88 @@ interface UserRow {
   createdAt:    string
 }
 
-interface UsersResponse {
-  users: UserRow[]
-}
-
-interface UserResponse {
-  user: UserRow
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return 'never'
-  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-}
+interface UsersResponse { users: UserRow[] }
+interface UserResponse  { user:  UserRow  }
 
 export async function runUsersList(opts: { registry?: string; token?: string }): Promise<void> {
   const { registry, token } = resolveAuth(opts)
+  const s = spin('loading users')
 
   try {
     const { users } = await apiGet<UsersResponse>(registry, token, '/api/admin/users')
+    s.succeed(`${users.length} user${users.length === 1 ? '' : 's'}`)
+    console.log('')
 
     if (users.length === 0) {
-      console.log('no users found.')
+      empty('no users found.')
+      console.log('')
       return
     }
 
-    const emailWidth = Math.max(5, ...users.map(u => u.email.length))
-    const nameWidth  = Math.max(4, ...users.map(u => u.name.length))
+    const emailW = Math.max(5, ...users.map(u => u.email.length))
+    const nameW  = Math.max(4, ...users.map(u => u.name.length))
 
     const header = [
-      'EMAIL'.padEnd(emailWidth),
-      'NAME'.padEnd(nameWidth),
+      'EMAIL'.padEnd(emailW),
+      'NAME'.padEnd(nameW),
       'ROLE'.padEnd(8),
       'LAST ACTIVE',
     ].join('  ')
 
-    console.log(header)
-    console.log('─'.repeat(header.length))
+    console.log(`  ${c.bold(c.gray(header))}`)
+    console.log(`  ${c.gray('─'.repeat(header.length))}`)
 
     for (const u of users) {
-      console.log([
-        u.email.padEnd(emailWidth),
-        u.name.padEnd(nameWidth),
-        u.role.padEnd(8),
-        formatDate(u.lastActiveAt),
-      ].join('  '))
+      const roleBadge = badge(u.role)
+      const rolePad   = roleBadge + ' '.repeat(Math.max(0, 8 - u.role.length))
+      const cols = [
+        u.email.padEnd(emailW),
+        c.gray(u.name.padEnd(nameW)),
+        rolePad,
+        c.gray(fmtDate(u.lastActiveAt)),
+      ]
+      console.log(`  ${cols.join('  ')}`)
     }
+    console.log('')
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error(`error: ${msg}`)
+    s.fail(err instanceof Error ? err.message : String(err))
+    console.log('')
     process.exit(1)
   }
 }
 
 export async function runUsersSetRole(
   email: string,
-  role: string,
-  opts: { registry?: string; token?: string },
+  role:  string,
+  opts:  { registry?: string; token?: string },
 ): Promise<void> {
+  console.log('')
+
   if (role !== 'admin' && role !== 'member') {
-    console.error('error: role must be "admin" or "member".')
+    console.error(`  ${c.error('error')}  role must be ${c.amber('"admin"')} or ${c.amber('"member"')}.`)
+    console.log('')
     process.exit(1)
   }
 
   const { registry, token } = resolveAuth(opts)
+  const s = spin(`updating role for ${c.amber(email)}`)
 
   try {
-    // Find user by email
     const { users } = await apiGet<UsersResponse>(registry, token, '/api/admin/users')
     const user = users.find(u => u.email === email)
 
     if (!user) {
-      console.error(`error: no user found with email "${email}".`)
+      s.fail(`no user found with email "${email}"`)
+      console.log('')
       process.exit(1)
     }
 
     await apiPatch<UserResponse>(registry, token, `/api/admin/users/${user.id}`, { role })
-    console.log(`${email} → ${role}`)
+    s.succeed(`${email}  ${c.gray('→')}  ${badge(role)}`)
+    console.log('')
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error(`error: ${msg}`)
+    s.fail(err instanceof Error ? err.message : String(err))
+    console.log('')
     process.exit(1)
   }
 }

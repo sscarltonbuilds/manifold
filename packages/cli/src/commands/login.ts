@@ -1,31 +1,43 @@
 import { saveConfig, clearConfig, getConfig } from '../config.js'
+import { c, step, kv } from '../ui.js'
 
 export function runLogin(opts: { registry?: string; token?: string }): void {
   const registry = opts.registry ?? process.env['MANIFOLD_REGISTRY']
   const token    = opts.token    ?? process.env['MANIFOLD_TOKEN']
 
   if (!registry || !token) {
-    console.error('usage: manifold login --registry <url> --token <token>')
     console.error('')
-    console.error('generate a token from your Manifold admin settings page.')
+    console.error(`  ${c.bold('usage')}  manifold login --registry <url> --token <token>`)
+    console.error('')
+    console.error(`  ${c.gray('generate an API key from')} ${c.amber('Admin → Settings → API Keys')}${c.gray('.')}`)
+    console.error('')
     process.exit(1)
   }
 
-  saveConfig({ registry: registry.replace(/\/$/, ''), token })
-  console.log(`logged in to ${registry.replace(/\/$/, '')}`)
+  const base = registry.replace(/\/$/, '')
+  saveConfig({ registry: base, token })
+  console.log('')
+  step(`logged in to ${c.amber(base)}`)
+  console.log('')
 }
 
 export function runLogout(): void {
   clearConfig()
-  console.log('logged out.')
+  console.log('')
+  step('credentials cleared')
+  console.log('')
 }
 
 export function runWhoami(): void {
   const cfg = getConfig()
+  console.log('')
   if (!cfg.registry && !cfg.token) {
-    console.log('not logged in.')
+    console.log(`  ${c.gray('not logged in.')}`)
+    console.log(`  ${c.gray('run')} ${c.amber('manifold login --registry <url> --token <token>')}`)
+    console.log('')
     return
   }
-  console.log(`registry  ${cfg.registry ?? '(not set)'}`)
-  console.log(`token     ${cfg.token ? cfg.token.slice(0, 8) + '...' : '(not set)'}`)
+  kv('registry', cfg.registry ? c.amber(cfg.registry) : c.gray('(not set)'))
+  kv('token',    cfg.token    ? c.gray(cfg.token.slice(0, 12) + '…') : c.gray('(not set)'))
+  console.log('')
 }
