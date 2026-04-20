@@ -3,5 +3,9 @@ export async function register() {
     const { env } = await import('./lib/env')
     // Accessing env triggers Zod parse — throws with a clear message if invalid
     void env
+
+    // Start background health checks for active connectors
+    const { initHealthChecks } = await import('./lib/health-check')
+    initHealthChecks()
   }
 }

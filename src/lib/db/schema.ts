@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, boolean, jsonb, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, timestamp, boolean, jsonb, pgEnum, uniqueIndex, integer, bigint, primaryKey } from 'drizzle-orm/pg-core'
 
 export const userRoleEnum       = pgEnum('user_role',        ['member', 'admin'])
 export const connectorStatusEnum = pgEnum('connector_status', ['pending', 'active', 'deprecated'])
@@ -168,6 +168,13 @@ export const connectorRequests = pgTable('connector_requests', {
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 })
+
+// Postgres-backed rate limiting — survives restarts, works across instances
+export const rateLimitWindows = pgTable('rate_limit_windows', {
+  key:         text('key').notNull(),
+  windowStart: bigint('window_start', { mode: 'number' }).notNull(),
+  count:       integer('count').notNull().default(1),
+}, t => [primaryKey({ columns: [t.key, t.windowStart] })])
 
 // Type exports
 export type OrgSetting          = typeof orgSettings.$inferSelect
