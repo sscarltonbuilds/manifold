@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
-import { connectors, auditLogs } from '@/lib/db/schema'
+import { connectors, auditLogs, userConnectorConfigs } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
@@ -40,6 +40,13 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     .set({ ...parsed.data, updatedAt: new Date() })
     .where(eq(connectors.id, id))
 
+  // When deprecating, disable all user configs for this connector
+  if (parsed.data.status === 'deprecated') {
+    await db.update(userConnectorConfigs)
+      .set({ enabled: false })
+      .where(eq(userConnectorConfigs.connectorId, id))
+  }
+
   await db.insert(auditLogs).values({
     actorId:     admin.userId,
     connectorId: id,
@@ -58,10 +65,14 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const [existing] = await db.select().from(connectors).where(eq(connectors.id, id)).limit(1)
   if (!existing) return NextResponse.json({ error: { code: 'not_found' } }, { status: 404 })
 
-  // Soft-delete: set status to deprecated
+  // Soft-delete: set status to deprecated, disable all user configs
   await db.update(connectors)
     .set({ status: 'deprecated', updatedAt: new Date() })
     .where(eq(connectors.id, id))
+
+  await db.update(userConnectorConfigs)
+    .set({ enabled: false })
+    .where(eq(userConnectorConfigs.connectorId, id))
 
   await db.insert(auditLogs).values({
     actorId:     admin.userId,

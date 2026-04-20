@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plug, CheckCircle2, Circle, Settings2, Lock, Link2 } from 'lucide-react'
+import { Plug, CheckCircle2, Circle, Settings2, Lock, Link2, AlertTriangle } from 'lucide-react'
 import { ConnectorConfigSheet } from './connector-config-sheet'
 import { toast } from 'sonner'
 import type { AuthField } from '@/lib/manifest'
@@ -37,6 +37,8 @@ export function ConnectorCard({
   const [toggling, setToggling]     = useState(false)
   const [sheetOpen, setSheetOpen]   = useState(false)
 
+  const isDeprecated = connector.status === 'deprecated'
+
   // For admin_managed / none connectors there's nothing to configure per-user
   const needsUserConfig = connector.managedBy === 'user' && connector.authType !== 'none'
   const isOAuth2 = connector.authType === 'oauth2'
@@ -46,6 +48,7 @@ export function ConnectorCard({
   }
 
   const handleToggle = async () => {
+    if (isDeprecated) return
     if (!configured && !enabled && needsUserConfig) {
       if (isOAuth2) {
         startOAuthFlow()
@@ -82,13 +85,37 @@ export function ConnectorCard({
 
   return (
     <>
-      <div className="bg-white border border-[#E3E1DC] rounded-[10px] p-5 hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-shadow duration-150">
+      <div className={`bg-white border rounded-[10px] overflow-hidden transition-shadow duration-150 ${
+        isDeprecated
+          ? 'border-[#E3E1DC] opacity-75'
+          : 'border-[#E3E1DC] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]'
+      }`}>
+        {/* Deprecated banner */}
+        {isDeprecated && (
+          <div className="bg-[#2E2618] border-b border-[#C4853A]/20 px-5 py-2 rounded-t-[10px] flex items-center gap-2">
+            <AlertTriangle size={11} className="text-[#C4853A] flex-none" />
+            <span className="text-[#C4853A] text-[11px]">
+              This connector has been deprecated and will be removed.
+            </span>
+          </div>
+        )}
+
+        <div className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="w-10 h-10 bg-[#1A1917] rounded-[8px] flex items-center justify-center flex-none">
             {iconEl}
           </div>
 
-          {bundleSource?.required ? (
+          {isDeprecated ? (
+            <div className="flex items-center gap-1.5 text-[#9C9890] mt-0.5">
+              <span
+                className="relative w-10 h-5 rounded-full bg-[#3A3836] flex-none opacity-40 cursor-not-allowed"
+                aria-label="Connector disabled"
+              >
+                <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white translate-x-0.5" />
+              </span>
+            </div>
+          ) : bundleSource?.required ? (
             <div className="flex items-center gap-1.5 text-[#9C9890] mt-0.5" title={`Required by ${bundleSource.name}`}>
               <Lock size={13} />
               <span className="text-[10px] font-semibold uppercase tracking-[0.06em]">Required</span>
@@ -140,7 +167,7 @@ export function ConnectorCard({
             )}
           </div>
 
-          {needsUserConfig && (
+          {needsUserConfig && !isDeprecated && (
             isOAuth2 ? (
               <button
                 onClick={startOAuthFlow}
@@ -160,9 +187,10 @@ export function ConnectorCard({
             )
           )}
         </div>
+        </div>{/* end p-5 */}
       </div>
 
-      {needsUserConfig && !isOAuth2 && (
+      {needsUserConfig && !isOAuth2 && !isDeprecated && (
         <ConnectorConfigSheet
           connectorId={connector.id}
           connectorName={connector.name}

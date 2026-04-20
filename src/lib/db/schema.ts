@@ -76,6 +76,7 @@ export const oauthTokens = pgTable('oauth_tokens', {
   id:        uuid('id').primaryKey().defaultRandom(),
   userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   tokenHash: text('token_hash').notNull().unique(),
+  name:      text('name'),
   clientId:  text('client_id').notNull(),
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -157,6 +158,17 @@ export const connectorOAuthStates = pgTable('connector_oauth_states', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 })
 
+export const connectorRequests = pgTable('connector_requests', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  userId:        uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  connectorId:   text('connector_id').references(() => connectors.id, { onDelete: 'set null' }),
+  connectorName: text('connector_name'),
+  message:       text('message'),
+  status:        text('status').notNull().default('pending'),   // 'pending' | 'noted' | 'dismissed'
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+})
+
 // Type exports
 export type OrgSetting          = typeof orgSettings.$inferSelect
 export type User                = typeof users.$inferSelect
@@ -174,3 +186,4 @@ export type BundleConnector     = typeof bundleConnectors.$inferSelect
 export type UserBundle          = typeof userBundles.$inferSelect
 export type AdminApiKey         = typeof adminApiKeys.$inferSelect
 export type ConnectorOAuthState = typeof connectorOAuthStates.$inferSelect
+export type ConnectorRequest    = typeof connectorRequests.$inferSelect

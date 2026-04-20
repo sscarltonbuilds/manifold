@@ -4,6 +4,7 @@ import { AdminSettingsClient } from '@/components/admin/admin-settings-client'
 import { OrgBrandingClient } from '@/components/admin/org-branding-client'
 import { DomainRestrictionsClient } from '@/components/admin/domain-restrictions-client'
 import { ApiKeysClient } from '@/components/admin/api-keys-client'
+import { ExportClient } from '@/components/admin/export-client'
 import { CopyButton } from '@/components/shared/copy-button'
 import { db } from '@/lib/db'
 import { orgSettings } from '@/lib/db/schema'
@@ -76,7 +77,7 @@ export default async function AdminSettingsPage() {
       </section>
 
       {/* API Keys */}
-      <section>
+      <section className="mb-8">
         <h2 className="text-[#1A1917] text-sm font-semibold uppercase tracking-[0.08em] mb-1">
           API Keys
         </h2>
@@ -84,6 +85,17 @@ export default async function AdminSettingsPage() {
           Generate keys for CLI access. Use with <code className="font-mono text-[#C4853A]">manifold login --token mfk_…</code>
         </p>
         <ApiKeysClient />
+      </section>
+
+      {/* Export */}
+      <section>
+        <h2 className="text-[#1A1917] text-sm font-semibold uppercase tracking-[0.08em] mb-1">
+          Export
+        </h2>
+        <p className="text-[#9C9890] text-xs mb-3">
+          Download a snapshot of your org data. Credentials are never included.
+        </p>
+        <ExportClient />
       </section>
     </div>
   )

@@ -597,13 +597,21 @@ export function ConnectorDetailClient({ connector, policy: initialPolicy, enable
             )}
 
             {connector.status !== 'deprecated' && (
-              <button
-                onClick={deprecate}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-[#A3352B] bg-white border border-[#E3E1DC] rounded-[8px] hover:bg-[#FDF2F2] transition-colors ml-auto"
-              >
-                <Trash2 size={13} />
-                Deprecate
-              </button>
+              <div className="flex flex-col items-end gap-2 ml-auto">
+                {enabledCount > 0 && (
+                  <p className="text-[#C4853A] text-xs text-right max-w-xs">
+                    {enabledCount} user{enabledCount !== 1 ? 's have' : ' has'} this connector enabled.
+                    Deprecating will disable access for all of them.
+                  </p>
+                )}
+                <button
+                  onClick={deprecate}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-[#A3352B] bg-white border border-[#E3E1DC] rounded-[8px] hover:bg-[#FDF2F2] transition-colors"
+                >
+                  <Trash2 size={13} />
+                  Deprecate
+                </button>
+              </div>
             )}
           </div>
         </div>

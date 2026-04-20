@@ -7,21 +7,29 @@ import { LogoMark } from '@/components/shared/logo-mark'
 import { UserMenu } from '@/components/shared/user-menu'
 import { cn } from '@/lib/utils'
 
-const NAV_ITEMS = [
-  { href: '/admin',            label: 'Overview',    icon: LayoutDashboard },
-  { href: '/admin/users',      label: 'Users',       icon: Users },
-  { href: '/admin/connectors', label: 'Connectors',  icon: Plug },
-  { href: '/admin/bundles',    label: 'Bundles',     icon: Layers },
-  { href: '/admin/settings',   label: 'Settings',    icon: Settings },
-  { href: '/admin/audit',      label: 'Audit Log',   icon: ScrollText },
-]
-
-interface AdminSidebarProps {
-  orgLogoUrl?: string | null
+interface NavItem {
+  href:  string
+  label: string
+  icon:  React.ComponentType<{ size?: number; strokeWidth?: number }>
+  badge?: number
 }
 
-export function AdminSidebar({ orgLogoUrl }: AdminSidebarProps) {
+interface AdminSidebarProps {
+  orgLogoUrl?:          string | null
+  pendingRequestCount?: number
+}
+
+export function AdminSidebar({ orgLogoUrl, pendingRequestCount = 0 }: AdminSidebarProps) {
   const pathname = usePathname()
+
+  const NAV_ITEMS: NavItem[] = [
+    { href: '/admin',            label: 'Overview',   icon: LayoutDashboard },
+    { href: '/admin/users',      label: 'Users',      icon: Users },
+    { href: '/admin/connectors', label: 'Connectors', icon: Plug, badge: pendingRequestCount },
+    { href: '/admin/bundles',    label: 'Bundles',    icon: Layers },
+    { href: '/admin/settings',   label: 'Settings',   icon: Settings },
+    { href: '/admin/audit',      label: 'Audit Log',  icon: ScrollText },
+  ]
 
   return (
     <aside className="w-[220px] flex-none flex flex-col bg-[#0D0D0B] border-r border-[#2A2926] relative">
@@ -54,7 +62,7 @@ export function AdminSidebar({ orgLogoUrl }: AdminSidebarProps) {
         </div>
 
         <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
-          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+          {NAV_ITEMS.map(({ href, label, icon: Icon, badge }) => {
             const isActive = href === '/admin'
               ? pathname === '/admin'
               : pathname.startsWith(href)
@@ -70,7 +78,10 @@ export function AdminSidebar({ orgLogoUrl }: AdminSidebarProps) {
                 )}
               >
                 <Icon size={15} strokeWidth={1.75} />
-                {label}
+                <span className="flex-1">{label}</span>
+                {badge != null && badge > 0 && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#C4853A] flex-none" />
+                )}
               </Link>
             )
           })}

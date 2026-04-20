@@ -1,9 +1,10 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { connectors, userConnectorConfigs, userBundles, bundleConnectors, bundles } from '@/lib/db/schema'
-import { eq, ne } from 'drizzle-orm'
+import { eq, asc, sql } from 'drizzle-orm'
 import { ConnectorCard } from '@/components/connectors/connector-card'
 import { OAuthResultToast } from '@/components/connectors/oauth-result-toast'
+import { RequestConnectorButton } from '@/components/connectors/request-connector-button'
 import { redirect } from 'next/navigation'
 import { Plug } from 'lucide-react'
 import { getAuthFields } from '@/lib/manifest'
@@ -16,8 +17,12 @@ export default async function ConnectorsPage() {
 
   const userId = session.user.id
 
-  const [activeConnectors, configs, bundleMemberships] = await Promise.all([
-    db.select().from(connectors).where(ne(connectors.status, 'deprecated')),
+  const [allConnectors, configs, bundleMemberships] = await Promise.all([
+    // All connectors sorted: active/pending first, deprecated last
+    db.select().from(connectors).orderBy(
+      sql`CASE WHEN ${connectors.status} = 'deprecated' THEN 1 ELSE 0 END`,
+      asc(connectors.name)
+    ),
     db.select().from(userConnectorConfigs).where(eq(userConnectorConfigs.userId, userId)),
     db
       .select({
@@ -40,13 +45,16 @@ export default async function ConnectorsPage() {
     }
   }
 
-  if (activeConnectors.length === 0) {
+  if (allConnectors.length === 0) {
     return (
       <div className="p-8 max-w-5xl">
         <Suspense><OAuthResultToast /></Suspense>
-        <div className="mb-8">
-          <h1 className="text-[#1A1917] text-2xl font-medium tracking-tight">Connectors</h1>
-          <p className="text-[#6B6966] text-sm mt-1">Connect your tools to your AI assistant.</p>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-[#1A1917] text-2xl font-medium tracking-tight">Connectors</h1>
+            <p className="text-[#6B6966] text-sm mt-1">Connect your tools to your AI assistant.</p>
+          </div>
+          <RequestConnectorButton />
         </div>
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 bg-[#F5F4F0] border border-[#E3E1DC] rounded-[10px] flex items-center justify-center mb-4">
@@ -62,13 +70,16 @@ export default async function ConnectorsPage() {
   return (
     <div className="p-8 max-w-5xl">
       <Suspense><OAuthResultToast /></Suspense>
-      <div className="mb-8">
-        <h1 className="text-[#1A1917] text-2xl font-medium tracking-tight">Connectors</h1>
-        <p className="text-[#6B6966] text-sm mt-1">Connect your tools to your AI assistant.</p>
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[#1A1917] text-2xl font-medium tracking-tight">Connectors</h1>
+          <p className="text-[#6B6966] text-sm mt-1">Connect your tools to your AI assistant.</p>
+        </div>
+        <RequestConnectorButton />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {activeConnectors.map(connector => {
+        {allConnectors.map(connector => {
           const config = configMap.get(connector.id)
           const authFields = getAuthFields(connector.manifest as Manifest)
           return (
