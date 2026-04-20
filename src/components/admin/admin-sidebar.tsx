@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, Plug, Settings, ScrollText } from 'lucide-react'
+import { LayoutDashboard, Users, Plug, Settings, ScrollText, Layers } from 'lucide-react'
 import { LogoMark } from '@/components/shared/logo-mark'
 import { UserMenu } from '@/components/shared/user-menu'
 import { cn } from '@/lib/utils'
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: '/admin',            label: 'Overview',    icon: LayoutDashboard },
   { href: '/admin/users',      label: 'Users',       icon: Users },
   { href: '/admin/connectors', label: 'Connectors',  icon: Plug },
+  { href: '/admin/bundles',    label: 'Bundles',     icon: Layers },
   { href: '/admin/settings',   label: 'Settings',    icon: Settings },
   { href: '/admin/audit',      label: 'Audit Log',   icon: ScrollText },
 ]

@@ -55,6 +55,7 @@ export default async function AdminConnectorDetailPage({
           endpoint:          connector.endpoint,
           authType:          connector.authType,
           managedBy:         connector.managedBy,
+          iconUrl:           connector.iconUrl ?? null,
           manifest:          connector.manifest,
           discoveredTools:   connector.discoveredTools as Array<{ name: string; description: string }> | null,
           toolsDiscoveredAt: connector.toolsDiscoveredAt?.toISOString() ?? null,

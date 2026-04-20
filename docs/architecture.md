@@ -239,6 +239,14 @@ A new 12-byte IV is generated for every encryption call. The same plaintext encr
 
 The full credential config for a connector is serialised to JSON and encrypted as a single blob. Individual fields are not encrypted separately. When credentials are updated, the full blob is re-encrypted — partial updates are not supported. This prevents partial-credential states where some fields are from a previous configuration.
 
+#### HMAC binding
+
+In addition to AES-256-GCM encryption, each credential blob is protected by an HMAC-SHA256 binding that ties it to its owner context. The HMAC is computed over `userId:connectorId:encryptedBlob` using the encryption key as the HMAC key.
+
+On every credential read, the HMAC is recomputed and compared using a constant-time comparison. This prevents an attacker with direct database write access from swapping one user's encrypted credentials onto another user's row — the HMAC would fail even though the ciphertext itself is valid.
+
+The binding HMAC is stored alongside the encrypted config in `userConnectorConfigs.config_hmac` and `connectorAdminConfigs.config_hmac`.
+
 ---
 
 ## Connector Discovery
@@ -292,6 +300,37 @@ Active Bearer tokens. `tokenHash` is `SHA-256(plaintext_token)`. The plaintext i
 
 **`auditLogs`**
 Append-only event log. `actorId` is who performed the action. `targetUserId` is set when an admin acts on behalf of a user. `connectorId` is set for connector-related events. `detail` is a jsonb object with event-specific context. Human-readable action strings: `connector.registered`, `connector.deprecated`, `credentials.updated`, `tool.disabled`, etc.
+
+---
+
+## Bundles
+
+Bundles are named sets of connectors that admins assign to users. They solve org-scale provisioning: instead of configuring each user individually, create a "Marketing stack" bundle, add the relevant connectors, and assign it to any new marketing hire.
+
+### Data model
+
+```
+bundles:            id, name, description, emoji, createdBy
+bundleConnectors:   bundleId, connectorId, required (boolean)
+userBundles:        userId, bundleId, assignedBy, assignedAt
+```
+
+Each `bundleConnectors` row has a `required` flag. When `required = true`, the connector's toggle is locked in the user's UI — they cannot disable it.
+
+### Assignment behaviour
+
+When an admin assigns a bundle to a user:
+
+- Connectors with `managedBy = 'admin'` or `authType = 'none'` are **auto-provisioned**: Manifold creates or updates the user's `userConnectorConfigs` row with `enabled = true`. The user has immediate access with no action required.
+- Connectors with `managedBy = 'user'` are surfaced in the user's connector list with a "via [Bundle Name]" indicator and a setup prompt. The user still enters their own credentials, but the connector is highlighted as part of their role's stack.
+
+### Transparency to the MCP gateway
+
+Bundles do not change the MCP proxy. The gateway reads `userConnectorConfigs` where `enabled = true` — auto-provisioned rows look identical to manually-enabled rows. Bundle logic is entirely in the assignment API and the UI.
+
+### Removal
+
+When a bundle is removed from a user, auto-provisioned connectors (admin-managed, from this bundle and not covered by another active bundle) are disabled. Connectors the user has personally configured are left untouched.
 
 ---
 

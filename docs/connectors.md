@@ -65,6 +65,8 @@ Every connector is described by a single `manifold.json` file. This is the contr
 | `description` | string | Yes | One or two sentences describing what the connector provides. Shown in the UI. |
 | `icon` | string (URL) | No | URL to an SVG or PNG icon. Displayed in the connector card. |
 | `endpoint` | string (URL) | Yes | The MCP server URL. Manifold sends all JSON-RPC requests here. |
+
+> **Tip:** If your connector doesn't include an icon in its manifest, an admin can set one later from the connector's detail page (Admin → Connectors → [connector] → Overview → Icon).
 | `auth` | object | Yes | Authentication configuration. See [Auth Types](#auth-types). |
 
 ---
@@ -243,6 +245,14 @@ manifold connectors refresh <connector-id>
 ```
 
 If your endpoint is unreachable or returns an invalid response at registration time, the registration is rejected. Manifold will not register a connector with no tools.
+
+### Built-in Manifold tool
+
+Manifold adds one tool to every user's `tools/list` regardless of their enabled connectors:
+
+**`manifold_list_connectors`** — returns all connectors available in the org with per-user enabled/configured status and a `setupUrl`. AI tools use this to understand what integrations exist but haven't been configured yet, and to direct users to enable what they need.
+
+This tool is always present and cannot be disabled. It is answered directly by Manifold — no connector endpoint is involved.
 
 ---
 

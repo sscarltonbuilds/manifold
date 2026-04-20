@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 import { orgSettings } from '@/lib/db/schema'
 import { z } from 'zod'
 
-const ALLOWED_KEYS = ['org_logo_url'] as const
+const ALLOWED_KEYS = ['org_logo_url', 'allowed_domains'] as const
 type SettingKey = typeof ALLOWED_KEYS[number]
 
 export async function GET() {
@@ -21,7 +21,7 @@ export async function GET() {
 
 const PutSchema = z.object({
   key:   z.enum(ALLOWED_KEYS),
-  value: z.string().max(700_000), // data URLs for logos can be up to ~680KB (512KB file → base64)
+  value: z.string().max(700_000), // data URLs for logos can be up to ~680KB; other values are small
 })
 
 export async function PUT(req: NextRequest) {

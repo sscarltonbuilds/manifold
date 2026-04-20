@@ -9,6 +9,23 @@ import type { Manifest, Injection } from '@/lib/manifest'
 const PROXY_TIMEOUT_MS = 30_000
 
 // ---------------------------------------------------------------------------
+// Built-in Manifold tools
+// ---------------------------------------------------------------------------
+
+const MANIFOLD_LIST_CONNECTORS_TOOL = {
+  name: 'manifold_list_connectors',
+  description:
+    'Returns all connectors available in this Manifold instance with per-user enabled/configured status. ' +
+    'Call this when a user asks about a capability you cannot currently access, or to understand what integrations ' +
+    'exist on their Manifold instance but are not yet enabled or configured.',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {},
+    required: [],
+  },
+}
+
+// ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
 
@@ -70,7 +87,69 @@ export async function getEnabledTools(userId: string): Promise<McpTool[]> {
     }
   }
 
+  tools.push(MANIFOLD_LIST_CONNECTORS_TOOL)
   return tools
+}
+
+// ---------------------------------------------------------------------------
+// Built-in Manifold tool handler
+// ---------------------------------------------------------------------------
+
+export async function handleManifoldTool(
+  userId: string,
+  toolName: string,
+): Promise<unknown> {
+  if (toolName !== 'manifold_list_connectors') {
+    throw { code: -32601, message: `Unknown Manifold tool: ${toolName}` }
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+
+  const [allConnectors, userConfigs] = await Promise.all([
+    db
+      .select({
+        id:              connectors.id,
+        name:            connectors.name,
+        description:     connectors.description,
+        authType:        connectors.authType,
+        managedBy:       connectors.managedBy,
+        discoveredTools: connectors.discoveredTools,
+      })
+      .from(connectors)
+      .where(eq(connectors.status, 'active')),
+    db
+      .select({
+        connectorId: userConnectorConfigs.connectorId,
+        enabled:     userConnectorConfigs.enabled,
+      })
+      .from(userConnectorConfigs)
+      .where(eq(userConnectorConfigs.userId, userId)),
+  ])
+
+  const configMap = new Map(userConfigs.map(c => [c.connectorId, c]))
+
+  const connectorList = allConnectors.map(c => {
+    const cfg = configMap.get(c.id)
+    const needsUserConfig = c.managedBy === 'user' && c.authType !== 'none'
+    const configured = needsUserConfig ? !!cfg : true
+    const enabled    = cfg?.enabled ?? (!needsUserConfig)
+    const toolCount  = Array.isArray(c.discoveredTools) ? (c.discoveredTools as unknown[]).length : 0
+
+    return {
+      id:          c.id,
+      name:        c.name,
+      description: c.description,
+      enabled,
+      configured,
+      toolCount,
+      ...((!enabled || !configured) ? { setupUrl: `${appUrl}/connectors` } : {}),
+    }
+  })
+
+  return {
+    connectors: connectorList,
+    setupUrl: `${appUrl}/connectors`,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +391,17 @@ export async function handleJsonRpc(request: JsonRpcRequest, userId: string): Pr
 
       case 'tools/call': {
         const { name, arguments: toolArgs } = request.params as { name: string; arguments: unknown }
+
+        // Intercept built-in Manifold tools
+        if (typeof name === 'string' && name.startsWith('manifold_')) {
+          const toolResult = await handleManifoldTool(userId, name)
+          return {
+            jsonrpc: '2.0',
+            id: request.id,
+            result: { content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }] },
+          }
+        }
+
         const result = await proxyToolCall(userId, name, toolArgs)
         return {
           jsonrpc: '2.0',

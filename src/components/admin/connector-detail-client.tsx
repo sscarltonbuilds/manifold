@@ -4,7 +4,9 @@ import { useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { RefreshCw, Loader2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import type { ChangeEvent } from 'react'
 import { CopyButton } from '@/components/shared/copy-button'
+import { AnimatedUnderlineTabs } from '@/components/ui/animated-tabs'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -141,6 +143,7 @@ interface ConnectorDetailProps {
     endpoint:          string
     authType:          string
     managedBy:         string
+    iconUrl:           string | null
     manifest:          unknown
     discoveredTools:   Array<{ name: string; description: string }> | null
     toolsDiscoveredAt: string | null
@@ -156,6 +159,126 @@ interface ConnectorDetailProps {
     rateLimitPerHour: Record<string, number> | null
   } | null
   enabledCount: number
+}
+
+// ---------------------------------------------------------------------------
+// Icon editor
+// ---------------------------------------------------------------------------
+
+function IconEditor({
+  connectorId,
+  currentIconUrl,
+  onSaved,
+}: {
+  connectorId:    string
+  currentIconUrl: string | null
+  onSaved:        () => void
+}) {
+  const [editing, setEditing]   = useState(false)
+  const [mode, setMode]         = useState<'url' | 'upload'>('url')
+  const [urlInput, setUrlInput] = useState('')
+  const [saving, setSaving]     = useState(false)
+
+  const save = async (iconUrl: string | null) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/connectors/${connectorId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ iconUrl }),
+      })
+      if (res.ok) {
+        toast.success(iconUrl ? 'Icon updated' : 'Icon removed')
+        setEditing(false)
+        onSaved()
+      } else {
+        toast.error('Failed to update icon')
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => { void save(reader.result as string) }
+    reader.readAsDataURL(file)
+  }
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-3">
+        {currentIconUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={currentIconUrl} alt="icon" className="w-8 h-8 object-contain rounded" />
+        ) : (
+          <div className="w-8 h-8 rounded bg-[#1A1917] flex-none" />
+        )}
+        <button
+          onClick={() => setEditing(true)}
+          className="text-xs text-[#C4853A] hover:underline"
+        >
+          Change icon
+        </button>
+        {currentIconUrl && (
+          <button
+            onClick={() => void save(null)}
+            className="text-xs text-[#9C9890] hover:text-[#A3352B] transition-colors"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3 flex-1">
+      <div className="flex gap-2">
+        {(['url', 'upload'] as const).map(m => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className={`px-3 py-1 text-xs font-medium rounded-[6px] transition-colors capitalize ${
+              mode === m ? 'bg-[#1A1917] text-[#F0EFE9]' : 'text-[#6B6966] hover:text-[#1A1917]'
+            }`}
+          >
+            {m === 'url' ? 'Paste URL' : 'Upload file'}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'url' ? (
+        <div className="flex items-center gap-2">
+          <input
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+            placeholder="https://example.com/icon.svg"
+            className="flex-1 h-8 px-3 text-xs text-[#1A1917] bg-white border border-[#E3E1DC] rounded-[6px] focus:outline-none focus:border-[#C4853A] transition-colors placeholder:text-[#9C9890]"
+          />
+          <button
+            onClick={() => void save(urlInput)}
+            disabled={!urlInput.trim() || saving}
+            className="h-8 px-3 text-xs font-medium text-[#1A1917] bg-[#C4853A] hover:bg-[#E8A855] rounded-[6px] transition-colors disabled:opacity-50"
+          >
+            Save
+          </button>
+          <button onClick={() => setEditing(false)} className="text-xs text-[#9C9890] hover:text-[#1A1917] transition-colors">Cancel</button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <label className="cursor-pointer h-8 px-3 inline-flex items-center text-xs font-medium text-[#1A1917] bg-white border border-[#E3E1DC] rounded-[6px] hover:bg-[#F5F4F0] transition-colors">
+            {saving ? 'Uploading…' : 'Choose image'}
+            <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} disabled={saving} />
+          </label>
+          <span className="text-[#9C9890] text-xs">Stored as data URL</span>
+          <button onClick={() => setEditing(false)} className="ml-auto text-xs text-[#9C9890] hover:text-[#1A1917] transition-colors">Cancel</button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -267,21 +390,12 @@ export function ConnectorDetailClient({ connector, policy: initialPolicy, enable
   return (
     <div>
       {/* Tabs */}
-      <div className="flex border-b border-[#E3E1DC] mb-6">
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] border-b-2 -mb-px transition-colors ${
-              tab === t.key
-                ? 'text-[#C4853A] border-[#C4853A]'
-                : 'text-[#9C9890] border-transparent hover:text-[#1A1917]'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <AnimatedUnderlineTabs
+        tabs={TABS}
+        active={tab}
+        onChange={setTab}
+        className="mb-6"
+      />
 
       {/* ── Overview ── */}
       {tab === 'overview' && (
@@ -347,9 +461,19 @@ export function ConnectorDetailClient({ connector, policy: initialPolicy, enable
             </div>
 
             {/* Tools discovered */}
-            <div className="px-5 py-3.5 flex items-center justify-between gap-4">
+            <div className="px-5 py-3.5 flex items-center justify-between gap-4 border-b border-[#E3E1DC]">
               <span className="text-[#6B6966] text-xs font-semibold uppercase tracking-[0.08em]">Tools discovered</span>
               <span className="text-[#1A1917] text-sm">{tools.length}</span>
+            </div>
+
+            {/* Icon */}
+            <div className="px-5 py-3.5 flex items-center justify-between gap-4">
+              <span className="text-[#6B6966] text-xs font-semibold uppercase tracking-[0.08em] flex-none">Icon</span>
+              <IconEditor
+                connectorId={connector.id}
+                currentIconUrl={connector.iconUrl}
+                onSaved={() => router.refresh()}
+              />
             </div>
           </div>
 

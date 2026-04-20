@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { connectors, userConnectorConfigs } from '@/lib/db/schema'
+import { connectors, userConnectorConfigs, userBundles, bundleConnectors, bundles } from '@/lib/db/schema'
 import { eq, ne } from 'drizzle-orm'
 import { ConnectorCard } from '@/components/connectors/connector-card'
 import { redirect } from 'next/navigation'
@@ -14,12 +14,29 @@ export default async function ConnectorsPage() {
 
   const userId = session.user.id
 
-  const [activeConnectors, configs] = await Promise.all([
+  const [activeConnectors, configs, bundleMemberships] = await Promise.all([
     db.select().from(connectors).where(ne(connectors.status, 'deprecated')),
     db.select().from(userConnectorConfigs).where(eq(userConnectorConfigs.userId, userId)),
+    db
+      .select({
+        connectorId: bundleConnectors.connectorId,
+        required:    bundleConnectors.required,
+        bundleName:  bundles.name,
+      })
+      .from(userBundles)
+      .innerJoin(bundles, eq(userBundles.bundleId, bundles.id))
+      .innerJoin(bundleConnectors, eq(bundleConnectors.bundleId, bundles.id))
+      .where(eq(userBundles.userId, userId)),
   ])
 
   const configMap = new Map(configs.map(c => [c.connectorId, c]))
+
+  const bundleMap = new Map<string, { name: string; required: boolean }>()
+  for (const m of bundleMemberships) {
+    if (!bundleMap.has(m.connectorId)) {
+      bundleMap.set(m.connectorId, { name: m.bundleName, required: m.required })
+    }
+  }
 
   if (activeConnectors.length === 0) {
     return (
@@ -66,6 +83,7 @@ export default async function ConnectorsPage() {
               enabled={config?.enabled ?? false}
               configured={!!config}
               userId={userId}
+              bundleSource={bundleMap.get(connector.id)}
             />
           )
         })}

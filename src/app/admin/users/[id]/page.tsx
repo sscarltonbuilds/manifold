@@ -1,12 +1,13 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { users, connectors, userConnectorConfigs } from '@/lib/db/schema'
+import { users, connectors, userConnectorConfigs, userBundles, bundles } from '@/lib/db/schema'
 import { eq, ne } from 'drizzle-orm'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, CheckCircle2, Circle } from 'lucide-react'
 import { AdminUserRoleToggle } from '@/components/admin/admin-user-role-toggle'
 import { AdminConfigureOnBehalf } from '@/components/admin/admin-configure-on-behalf'
+import { UserBundlesSection } from '@/components/admin/user-bundles-section'
 import { getAuthFields } from '@/lib/manifest'
 import type { Manifest } from '@/lib/manifest'
 
@@ -22,9 +23,21 @@ export default async function AdminUserDetailPage({
   const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1)
   if (!user) notFound()
 
-  const [activeConnectors, configs] = await Promise.all([
+  const [activeConnectors, configs, assignedBundles, allBundles] = await Promise.all([
     db.select().from(connectors).where(ne(connectors.status, 'deprecated')),
     db.select().from(userConnectorConfigs).where(eq(userConnectorConfigs.userId, id)),
+    db
+      .select({
+        bundleId:    userBundles.bundleId,
+        assignedAt:  userBundles.assignedAt,
+        name:        bundles.name,
+        emoji:       bundles.emoji,
+        description: bundles.description,
+      })
+      .from(userBundles)
+      .innerJoin(bundles, eq(userBundles.bundleId, bundles.id))
+      .where(eq(userBundles.userId, id)),
+    db.select({ id: bundles.id, name: bundles.name, emoji: bundles.emoji }).from(bundles),
   ])
 
   const connectorList = activeConnectors.map(c => ({
@@ -67,6 +80,12 @@ export default async function AdminUserDetailPage({
           <span className="text-xs text-[#9C9890]">That&apos;s you</span>
         )}
       </div>
+
+      <UserBundlesSection
+        userId={id}
+        assignedBundles={assignedBundles.map(b => ({ ...b, assignedAt: b.assignedAt.toISOString() }))}
+        allBundles={allBundles}
+      />
 
       <div>
         <h2 className="text-[#1A1917] text-sm font-semibold uppercase tracking-[0.08em] mb-3">Connectors</h2>

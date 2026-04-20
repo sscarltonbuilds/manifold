@@ -3,9 +3,8 @@ import { db } from '@/lib/db'
 import { connectors, userConnectorConfigs } from '@/lib/db/schema'
 import { eq, sql } from 'drizzle-orm'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { AddConnectorButton } from '@/components/admin/add-connector-button'
-import { RefreshConnectorButton } from '@/components/admin/refresh-connector-button'
+import { ConnectorsTableClient } from '@/components/admin/connectors-table-client'
 
 export default async function AdminConnectorsPage() {
   const session = await auth()
@@ -24,6 +23,20 @@ export default async function AdminConnectorsPage() {
     .groupBy(userConnectorConfigs.connectorId)
 
   const countMap = new Map(enabledCounts.map(r => [r.connectorId, r.count]))
+
+  const tableRows = allConnectors.map(c => ({
+    id:             c.id,
+    name:           c.name,
+    description:    c.description,
+    status:         c.status,
+    authType:       c.authType,
+    version:        c.version,
+    iconUrl:        c.iconUrl,
+    healthStatus:   c.healthStatus,
+    toolsChangedAt: c.toolsChangedAt ? c.toolsChangedAt.toISOString() : null,
+    toolCount:      Array.isArray(c.discoveredTools) ? (c.discoveredTools as unknown[]).length : 0,
+    enabledCount:   countMap.get(c.id) ?? 0,
+  }))
 
   return (
     <div className="p-8">
@@ -111,95 +124,7 @@ export default async function AdminConnectorsPage() {
           </div>
         </div>
       ) : (
-        <div className="bg-white border border-[#E3E1DC] rounded-[10px] overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[#E3E1DC]">
-                <th className="text-left px-5 py-3 text-[#6B6966] text-xs font-semibold uppercase tracking-[0.08em]">Connector</th>
-                <th className="text-left px-5 py-3 text-[#6B6966] text-xs font-semibold uppercase tracking-[0.08em]">Status</th>
-                <th className="text-left px-5 py-3 text-[#6B6966] text-xs font-semibold uppercase tracking-[0.08em]">Auth</th>
-                <th className="text-left px-5 py-3 text-[#6B6966] text-xs font-semibold uppercase tracking-[0.08em]">Users enabled</th>
-                <th className="text-left px-5 py-3 text-[#6B6966] text-xs font-semibold uppercase tracking-[0.08em]">Tools</th>
-                <th className="text-left px-5 py-3 text-[#6B6966] text-xs font-semibold uppercase tracking-[0.08em]">Version</th>
-                <th className="px-5 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E3E1DC]">
-              {allConnectors.map(c => {
-                const toolCount = Array.isArray(c.discoveredTools) ? (c.discoveredTools as unknown[]).length : 0
-                const hasDrift = c.toolsChangedAt && new Date(c.toolsChangedAt) >= ago7d
-                const healthDotColor =
-                  c.healthStatus === 'healthy'     ? '#4A7C59' :
-                  c.healthStatus === 'unreachable' ? '#A3352B' :
-                  '#9C9890'
-
-                return (
-                  <tr key={c.id} className="group hover:bg-[#F9F8F6] transition-colors">
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-2.5">
-                        {/* Health dot */}
-                        <span
-                          className="w-2 h-2 rounded-full flex-none"
-                          style={{ backgroundColor: healthDotColor }}
-                          title={c.healthStatus ?? 'not checked'}
-                        />
-                        {c.iconUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={c.iconUrl} alt="" className="w-5 h-5 object-contain flex-none" />
-                        ) : (
-                          <div className="w-5 h-5 rounded bg-[#1A1917] flex-none" />
-                        )}
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-[#1A1917] font-medium">{c.name}</p>
-                            {hasDrift && (
-                              <span className="text-[#C4853A] bg-[#FBF3E8] text-[10px] font-semibold uppercase tracking-[0.06em] px-1.5 py-0.5 rounded-full">
-                                Tools changed
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[#6B6966] text-xs mt-0.5 max-w-xs truncate">{c.description}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      {c.status === 'active' && (
-                        <span className="text-[#4A7C59] bg-[#EBF5EF] text-[11px] font-semibold tracking-[0.06em] uppercase px-2 py-0.5 rounded-full">
-                          Active
-                        </span>
-                      )}
-                      {c.status === 'pending' && (
-                        <span className="text-[#C4853A] bg-[#FBF3E8] text-[11px] font-semibold tracking-[0.06em] uppercase px-2 py-0.5 rounded-full">
-                          Pending
-                        </span>
-                      )}
-                      {c.status === 'deprecated' && (
-                        <span className="text-[#9C9890] bg-[#F5F4F0] text-[11px] font-semibold tracking-[0.06em] uppercase px-2 py-0.5 rounded-full">
-                          Deprecated
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 text-[#6B6966] text-xs font-mono">{c.authType}</td>
-                    <td className="px-5 py-3.5 text-[#6B6966]">{countMap.get(c.id) ?? 0}</td>
-                    <td className="px-5 py-3.5 text-[#6B6966]">{toolCount}</td>
-                    <td className="px-5 py-3.5 text-[#6B6966] font-mono text-xs">{c.version}</td>
-                    <td className="px-4 py-3.5">
-                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                        <RefreshConnectorButton connectorId={c.id} />
-                        <Link
-                          href={`/admin/connectors/${c.id}`}
-                          className="h-7 px-3 inline-flex items-center text-xs font-medium text-[#1A1917] bg-white border border-[#E3E1DC] rounded-[6px] hover:bg-[#F5F4F0] hover:border-[#D4D0C8] transition-colors whitespace-nowrap"
-                        >
-                          Manage
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ConnectorsTableClient rows={tableRows} ago7d={ago7d} />
       )}
     </div>
   )

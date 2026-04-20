@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'crypto'
+import { createCipheriv, createDecipheriv, randomBytes, createHash, createHmac } from 'crypto'
 
 const ALGORITHM = 'aes-256-gcm'
 const KEY_VERSION = process.env.ENCRYPTION_KEY_VERSION ?? '1'
@@ -15,6 +15,8 @@ export function encrypt(plaintext: string): string {
   const cipher = createCipheriv(ALGORITHM, key, iv)
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
   const tag = cipher.getAuthTag()
+  // Ensure we always use a 128-bit (16-byte) auth tag — the GCM default, but be explicit
+  if (tag.length !== 16) throw new Error('GCM auth tag length mismatch')
   return `${KEY_VERSION}:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`
 }
 
@@ -36,4 +38,36 @@ export function hashToken(token: string): string {
 
 export function generateToken(): string {
   return randomBytes(32).toString('hex')
+}
+
+/**
+ * Compute a binding HMAC that ties an encrypted config blob to its owner context.
+ * Prevents an attacker with DB write access from swapping one user's encrypted
+ * config for another's — the HMAC would fail verification.
+ */
+export function computeConfigHmac(
+  ownerKey: string,       // userId or 'admin:connectorId'
+  connectorId: string,
+  encryptedConfig: string,
+): string {
+  const key = getKey()
+  return createHmac('sha256', key)
+    .update(`${ownerKey}:${connectorId}:${encryptedConfig}`)
+    .digest('hex')
+}
+
+export function verifyConfigHmac(
+  ownerKey: string,
+  connectorId: string,
+  encryptedConfig: string,
+  storedHmac: string,
+): boolean {
+  const expected = computeConfigHmac(ownerKey, connectorId, encryptedConfig)
+  // Constant-time comparison
+  if (expected.length !== storedHmac.length) return false
+  let diff = 0
+  for (let i = 0; i < expected.length; i++) {
+    diff |= expected.charCodeAt(i) ^ storedHmac.charCodeAt(i)
+  }
+  return diff === 0
 }

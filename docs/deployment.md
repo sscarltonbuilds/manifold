@@ -71,12 +71,12 @@ All variables are validated at startup via Zod. The app will not start if any re
 | `GOOGLE_CLIENT_ID` | Yes | OAuth 2.0 client ID from Google Cloud Console |
 | `GOOGLE_CLIENT_SECRET` | Yes | OAuth 2.0 client secret from Google Cloud Console |
 | `ALLOWED_EMAIL_DOMAIN` | No* | Restricts sign-in to emails at this domain. E.g. `tunga.io` |
-| `ALLOWED_EMAILS` | No* | Comma-separated list of specific emails permitted to sign in. E.g. `alice@example.com,bob@example.com` |
+| `ALLOWED_EMAILS` | No* | No longer the recommended approach — use the invitation system in the admin UI instead. Still supported for backwards compatibility. |
 | `ENCRYPTION_KEY` | Yes | 64-character hex string (32 bytes). Generate: `openssl rand -hex 32` |
 | `ENCRYPTION_KEY_VERSION` | Yes | Starts at `1`. Increment on key rotation. |
 | `NEXT_PUBLIC_APP_URL` | Yes | Public URL of the app. Shown in the onboarding MCP URL display. |
 
-*At least one of `ALLOWED_EMAIL_DOMAIN` or `ALLOWED_EMAILS` is required. Both can be set simultaneously.
+*`ALLOWED_EMAIL_DOMAIN` is the primary restriction. Additional domains can be added at runtime from **Admin → Settings → Access control** without a redeploy. To invite individual users outside all allowed domains, use **Admin → Users → Invite member** — this generates a time-limited (7-day) accept link that bypasses domain restrictions for that email address. No email server is required.
 
 ---
 
@@ -258,3 +258,32 @@ To fully rotate (re-encrypt all existing credentials with the new key), write a 
 Run this script with both the old and new keys available. Once complete, the old key can be retired.
 
 Do not delete the old key until the migration is confirmed complete. Deleting it before re-encryption makes existing credentials unrecoverable.
+
+---
+
+## Managing User Access
+
+### Allowed domains
+
+The `ALLOWED_EMAIL_DOMAIN` environment variable sets the primary allowed domain. Additional domains can be added without redeployment from **Admin → Settings → Access control**.
+
+### Inviting users
+
+To grant access to a specific email outside your allowed domains:
+
+1. Go to **Admin → Users → Invite member**
+2. Enter the email address and select a role
+3. Copy the generated accept link and share it with the person directly
+4. When they click the link and sign in with Google, they are granted access
+
+Invitation links expire after 7 days. Pending invitations can be revoked from the Users page.
+
+### Bundles
+
+Once a user has signed in, assign them bundles to provision the right connector set for their role:
+
+1. Go to **Admin → Users → [user]**
+2. In the Bundles section, click **Assign bundle**
+3. Select the bundle — admin-managed connectors are provisioned instantly
+
+Create and manage bundles from **Admin → Bundles**.

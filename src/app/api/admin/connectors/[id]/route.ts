@@ -10,6 +10,7 @@ type RouteParams = { params: Promise<{ id: string }> }
 const PatchSchema = z.object({
   status:   z.enum(['pending', 'active', 'deprecated']).optional(),
   endpoint: z.string().url().optional(),
+  iconUrl:  z.string().max(2_000_000).nullable().optional(),
 }).strict()
 
 export async function GET(_req: NextRequest, { params }: RouteParams) {

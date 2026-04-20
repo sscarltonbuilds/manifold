@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { Search } from 'lucide-react'
+import { AnimatedTabs } from '@/components/ui/animated-tabs'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -173,21 +174,11 @@ export function AuditLogClient({ rows }: { rows: AuditRow[] }) {
       {/* Filter bar */}
       <div className="flex items-center gap-3 flex-wrap">
         {/* Category tabs */}
-        <div className="flex items-center bg-white border border-[#E3E1DC] rounded-[8px] p-0.5 gap-0.5">
-          {CATEGORIES.map(c => (
-            <button
-              key={c.key}
-              onClick={() => setCategory(c.key)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-[6px] transition-colors ${
-                category === c.key
-                  ? 'bg-[#1A1917] text-[#F0EFE9]'
-                  : 'text-[#6B6966] hover:text-[#1A1917]'
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
+        <AnimatedTabs
+          tabs={CATEGORIES}
+          active={category}
+          onChange={setCategory}
+        />
 
         {/* Time window */}
         <select

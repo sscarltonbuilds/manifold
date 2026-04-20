@@ -19,7 +19,7 @@ const HOW_IT_WORKS = [
     icon: Users,
     step: '03',
     title: 'Your team connects',
-    body: 'One MCP URL. Paste it into any compatible AI tool. Users sign in, toggle connectors on, done.',
+    body: 'One MCP URL. Users sign in and toggle connectors on. Or assign a bundle to provision the right set of tools for their role automatically.',
   },
 ]
 

@@ -20,9 +20,12 @@ No config files. No shared API keys. Full admin visibility.
 - **Google SSO** — team members sign in with their work account, no passwords
 - **Connector registry** — admins register external MCP servers via a `manifold.json` manifest
 - **Per-user credentials** — each person enters their own API keys; Manifold encrypts and stores them
-- **Admin governance** — disable tools, set rate limits, force-enable connectors, manage on behalf of users
+- **Bundles** — curated connector sets assigned by role; new hire gets the Marketing bundle, inherits Trello + Google Drive + Twist instantly
+- **Admin governance** — disable tools, set rate limits, force-enable connectors, configure on behalf of users
+- **Built-in connector intelligence** — `manifold_list_connectors` always appears in `tools/list` so your AI tool can guide users to configure what they're missing
 - **OAuth 2.1 / PKCE** — issues Bearer tokens to MCP clients following the standard auth flow
-- **Audit log** — every credential change, connector toggle, and role change recorded
+- **Audit log** — every credential change, connector toggle, role change, and bundle assignment recorded
+- **Invitation system** — invite specific emails from outside your allowed domain; link-based, no email server required
 
 Manifold has no built-in connectors. It is a pure auth and routing layer. Your MCP servers live wherever they live.
 

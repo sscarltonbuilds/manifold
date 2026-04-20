@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plug, CheckCircle2, Circle, Settings2 } from 'lucide-react'
+import { Plug, CheckCircle2, Circle, Settings2, Lock } from 'lucide-react'
 import { ConnectorConfigSheet } from './connector-config-sheet'
 import { toast } from 'sonner'
 import type { AuthField } from '@/lib/manifest'
@@ -17,11 +17,12 @@ interface ConnectorInfo {
 }
 
 interface ConnectorCardProps {
-  connector:   ConnectorInfo
-  authFields:  AuthField[]
-  enabled:     boolean
-  configured:  boolean
-  userId:      string
+  connector:    ConnectorInfo
+  authFields:   AuthField[]
+  enabled:      boolean
+  configured:   boolean
+  userId:       string
+  bundleSource?: { name: string; required: boolean }
 }
 
 export function ConnectorCard({
@@ -29,6 +30,7 @@ export function ConnectorCard({
   authFields,
   enabled: initialEnabled,
   configured: initialConfigured,
+  bundleSource,
 }: ConnectorCardProps) {
   const [enabled, setEnabled]       = useState(initialEnabled)
   const [configured, setConfigured] = useState(initialConfigured)
@@ -77,25 +79,37 @@ export function ConnectorCard({
             {iconEl}
           </div>
 
-          <button
-            onClick={handleToggle}
-            disabled={toggling}
-            className={`relative w-10 h-5 rounded-full transition-colors duration-150 flex-none mt-0.5 ${
-              enabled ? 'bg-[#C4853A]' : 'bg-[#3A3836]'
-            } ${toggling ? 'opacity-50 cursor-not-allowed' : ''}`}
-            aria-label={enabled ? 'Disable connector' : 'Enable connector'}
-          >
-            <span
-              className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-150 ${
-                enabled ? 'translate-x-5' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
+          {bundleSource?.required ? (
+            <div className="flex items-center gap-1.5 text-[#9C9890] mt-0.5" title={`Required by ${bundleSource.name}`}>
+              <Lock size={13} />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.06em]">Required</span>
+            </div>
+          ) : (
+            <button
+              onClick={handleToggle}
+              disabled={toggling}
+              className={`relative w-10 h-5 rounded-full transition-colors duration-150 flex-none mt-0.5 ${
+                enabled ? 'bg-[#C4853A]' : 'bg-[#3A3836]'
+              } ${toggling ? 'opacity-50 cursor-not-allowed' : ''}`}
+              aria-label={enabled ? 'Disable connector' : 'Enable connector'}
+            >
+              <span
+                className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-150 ${
+                  enabled ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          )}
         </div>
 
         <div className="mt-3">
           <h3 className="text-[#1A1917] text-sm font-medium">{connector.name}</h3>
           <p className="text-[#6B6966] text-xs mt-1 leading-relaxed">{connector.description}</p>
+          {bundleSource && (
+            <span className="inline-flex items-center gap-1 text-[#C4853A] text-[10px] font-semibold uppercase tracking-[0.06em] mt-1.5">
+              via {bundleSource.name}
+            </span>
+          )}
         </div>
 
         <div className="mt-4 flex items-center justify-between">

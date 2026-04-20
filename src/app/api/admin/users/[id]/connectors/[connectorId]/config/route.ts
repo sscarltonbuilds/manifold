@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { connectors, userConnectorConfigs, auditLogs } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
-import { encrypt, decrypt } from '@/lib/crypto'
+import { encrypt, decrypt, computeConfigHmac, verifyConfigHmac } from '@/lib/crypto'
 import { getAuthFields } from '@/lib/manifest'
 import type { Manifest } from '@/lib/manifest'
 import { z } from 'zod'
@@ -27,6 +27,21 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     .limit(1)
 
   if (!row) return NextResponse.json({ configured: false })
+
+  if (row.configHmac) {
+    const valid = verifyConfigHmac(userId, connectorId, row.encryptedConfig, row.configHmac)
+    if (!valid) {
+      return NextResponse.json({ error: { code: 'integrity_error', message: 'Credential integrity check failed' } }, { status: 500 })
+    }
+  }
+  // Log admin access to user credentials
+  await db.insert(auditLogs).values({
+    actorId:      session.user.id,
+    targetUserId: userId,
+    connectorId,
+    action:       'config.accessed_by_admin',
+    detail:       { connectorId, onBehalfOf: userId },
+  })
 
   const decrypted = JSON.parse(decrypt(row.encryptedConfig)) as Record<string, string>
   const fields = getAuthFields(connector.manifest as Manifest)
@@ -64,6 +79,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   }
 
   const encryptedConfig = encrypt(JSON.stringify(parsed.data))
+  const configHmac = computeConfigHmac(userId, connectorId, encryptedConfig)
   const keyVersion = process.env.ENCRYPTION_KEY_VERSION ?? '1'
 
   await db
@@ -73,11 +89,12 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       connectorId,
       encryptedConfig,
       encryptionKeyVersion: keyVersion,
+      configHmac,
       enabled:              true,
     })
     .onConflictDoUpdate({
       target: [userConnectorConfigs.userId, userConnectorConfigs.connectorId],
-      set:    { encryptedConfig, encryptionKeyVersion: keyVersion, enabled: true, updatedAt: new Date() },
+      set:    { encryptedConfig, encryptionKeyVersion: keyVersion, configHmac, enabled: true, updatedAt: new Date() },
     })
 
   await db.insert(auditLogs).values({

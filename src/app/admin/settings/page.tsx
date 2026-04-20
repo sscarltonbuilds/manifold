@@ -2,10 +2,12 @@ import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { AdminSettingsClient } from '@/components/admin/admin-settings-client'
 import { OrgBrandingClient } from '@/components/admin/org-branding-client'
+import { DomainRestrictionsClient } from '@/components/admin/domain-restrictions-client'
 import { CopyButton } from '@/components/shared/copy-button'
 import { db } from '@/lib/db'
 import { orgSettings } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
+import { env } from '@/lib/env'
 
 export default async function AdminSettingsPage() {
   const session = await auth()
@@ -50,6 +52,18 @@ export default async function AdminSettingsPage() {
           Replaces the Manifold mark in the sidebar for all users.
         </p>
         <OrgBrandingClient currentLogoUrl={logoRow?.value ?? null} />
+      </section>
+
+      {/* Access control */}
+      <section className="mb-8" id="access">
+        <h2 className="text-[#1A1917] text-sm font-semibold uppercase tracking-[0.08em] mb-1">
+          Access control
+        </h2>
+        <p className="text-[#9C9890] text-xs mb-3">
+          Domains allowed to sign in via Google OAuth. Invite specific emails from the{' '}
+          <a href="/admin/users" className="text-[#C4853A] hover:underline">Users page</a>.
+        </p>
+        <DomainRestrictionsClient primaryDomain={env.ALLOWED_EMAIL_DOMAIN ?? ''} />
       </section>
 
       {/* OAuth Credentials */}

@@ -44,6 +44,7 @@ export const connectorAdminConfigs = pgTable('connector_admin_configs', {
   connectorId:          text('connector_id').notNull().references(() => connectors.id, { onDelete: 'cascade' }),
   encryptedConfig:      text('encrypted_config').notNull(),
   encryptionKeyVersion: text('encryption_key_version').notNull().default('1'),
+  configHmac:           text('config_hmac'),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 })
 
@@ -54,6 +55,7 @@ export const userConnectorConfigs = pgTable('user_connector_configs', {
   connectorId:          text('connector_id').notNull().references(() => connectors.id, { onDelete: 'cascade' }),
   encryptedConfig:      text('encrypted_config').notNull(),
   encryptionKeyVersion: text('encryption_key_version').notNull().default('1'),
+  configHmac:           text('config_hmac'),
   enabled:              boolean('enabled').notNull().default(false),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 }, t => [uniqueIndex('uq_user_connector').on(t.userId, t.connectorId)])
@@ -103,6 +105,40 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt:    timestamp('created_at').notNull().defaultNow(),
 })
 
+export const invitations = pgTable('invitations', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  email:      text('email').notNull(),
+  role:       userRoleEnum('role').notNull().default('member'),
+  token:      text('token').notNull().unique(),
+  expiresAt:  timestamp('expires_at').notNull(),
+  invitedBy:  uuid('invited_by').notNull().references(() => users.id),
+  acceptedAt: timestamp('accepted_at'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+})
+
+export const bundles = pgTable('bundles', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  name:        text('name').notNull(),
+  description: text('description').notNull().default(''),
+  emoji:       text('emoji').notNull().default('📦'),
+  createdBy:   uuid('created_by').references(() => users.id),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+})
+
+export const bundleConnectors = pgTable('bundle_connectors', {
+  bundleId:    uuid('bundle_id').notNull().references(() => bundles.id, { onDelete: 'cascade' }),
+  connectorId: text('connector_id').notNull().references(() => connectors.id, { onDelete: 'cascade' }),
+  required:    boolean('required').notNull().default(false),
+}, t => [uniqueIndex('uq_bundle_connector').on(t.bundleId, t.connectorId)])
+
+export const userBundles = pgTable('user_bundles', {
+  userId:     uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  bundleId:   uuid('bundle_id').notNull().references(() => bundles.id, { onDelete: 'cascade' }),
+  assignedBy: uuid('assigned_by').references(() => users.id),
+  assignedAt: timestamp('assigned_at').notNull().defaultNow(),
+}, t => [uniqueIndex('uq_user_bundle').on(t.userId, t.bundleId)])
+
 // Type exports
 export type OrgSetting          = typeof orgSettings.$inferSelect
 export type User                = typeof users.$inferSelect
@@ -113,4 +149,8 @@ export type ConnectorPolicy     = typeof connectorPolicies.$inferSelect
 export type OAuthToken          = typeof oauthTokens.$inferSelect
 export type OAuthClient         = typeof oauthClients.$inferSelect
 export type AuditLog            = typeof auditLogs.$inferSelect
+export type Invitation          = typeof invitations.$inferSelect
 export type NewUser             = typeof users.$inferInsert
+export type Bundle            = typeof bundles.$inferSelect
+export type BundleConnector   = typeof bundleConnectors.$inferSelect
+export type UserBundle        = typeof userBundles.$inferSelect

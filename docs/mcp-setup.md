@@ -200,6 +200,45 @@ Tools are scoped to you. Another user on the same Manifold instance sees their o
 
 ---
 
+## Built-in Manifold Tools
+
+Every Manifold instance exposes one built-in tool that always appears in your `tools/list`, regardless of which connectors you've enabled:
+
+### `manifold_list_connectors`
+
+Returns all connectors available in this org, with your per-user enabled and configured status.
+
+```json
+{
+  "connectors": [
+    {
+      "id": "trello",
+      "name": "Trello",
+      "description": "Manage boards, cards and lists",
+      "enabled": false,
+      "configured": false,
+      "toolCount": 8,
+      "setupUrl": "https://your-instance.com/connectors"
+    },
+    {
+      "id": "pipedrive",
+      "name": "Pipedrive",
+      "description": "Access deals, leads, and contacts",
+      "enabled": true,
+      "configured": true,
+      "toolCount": 15
+    }
+  ],
+  "setupUrl": "https://your-instance.com/connectors"
+}
+```
+
+Your AI tool can call this when you ask about a capability it doesn't currently have. Instead of "I don't have Trello access", it can say "Trello is available on your Manifold instance but not yet configured. Visit [url] to set it up."
+
+This tool is always on and cannot be disabled.
+
+---
+
 ## Enabling Connectors
 
 Connectors don't appear as tools until you enable them.
@@ -211,6 +250,12 @@ Connectors don't appear as tools until you enable them.
 5. Click **Save**. The connector's tools are now available in your AI tool.
 
 Only connectors that are both **enabled** and **configured** appear in your tool list. A connector that's enabled but has no credentials saved will not contribute tools.
+
+### Bundles
+
+Your admin may have assigned you a bundle — a curated set of connectors for your role (e.g. "Marketing stack", "Engineering tools"). Connectors from a bundle appear in your list with a "via [Bundle Name]" indicator. Connectors marked **Required** by the bundle cannot be disabled.
+
+Admin-managed connectors in a bundle are provisioned automatically — no configuration needed. User-managed connectors still require you to enter your own credentials, but they appear prominently with a setup prompt.
 
 ---
 
